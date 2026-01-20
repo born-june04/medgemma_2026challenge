@@ -1,0 +1,134 @@
+import json
+from pathlib import Path
+from typing import Any, Dict, Optional
+
+import yaml
+
+from encoders import get_audio_encoder, get_image_encoder
+from llm.placeholder import PlaceholderLLM
+from physiology import compute_proxies, extract_audio_features, generate_physiology_explanations
+from signals.audio_signals import audio_anomaly_score
+from signals.image_signals import cxr_abnormality_score
+from signals.quality import compute_audio_quality, compute_image_quality, load_audio_mono, load_image
+
+
+DEFAULT_CONFIG_PATH = Path("configs/config.yaml")
+
+
+def load_config(path: Optional[str] = None) -> Dict[str, Any]:
+    config_path = Path(path) if path else DEFAULT_CONFIG_PATH
+    if config_path.exists():
+        with open(config_path, "r", encoding="utf-8") as handle:
+            return yaml.safe_load(handle) or {}
+    return {}
+
+
+def run_pipeline(
+    audio_path: str,
+    image_path: str,
+    intake_text: str,
+    mode: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    config = config or {}
+    use_stub = bool(config.get("use_stub_encoders", True))
+
+    audio_encoder = get_audio_encoder(use_stub, config.get("audio_checkpoint"))
+    image_encoder = get_image_encoder(use_stub, config.get("image_checkpoint"))
+
+    audio_embedding = audio_encoder.encode(audio_path)
+    image_embedding = image_encoder.encode(image_path)
+
+    audio, sr = load_audio_mono(audio_path)
+    audio_quality = compute_audio_quality(audio, sr)
+    image = load_image(image_path)
+    image_quality = compute_image_quality(image)
+
+    signals = {
+        "audio_anomaly_score": audio_anomaly_score(audio_embedding),
+        "cxr_abnormality_score": cxr_abnormality_score(image_embedding),
+    }
+
+    features = extract_audio_features(audio_path)
+    proxies = compute_proxies(features)
+    explanations = generate_physiology_explanations(features, proxies)
+
+    quality_payload = {
+        "audio_duration_sec": audio_quality.duration_sec,
+        "audio_clipping_fraction": audio_quality.clipping_fraction,
+        "audio_noise_ratio": audio_quality.noise_ratio,
+        "audio_warnings": list(audio_quality.warnings),
+        "image_width": image_quality.width,
+        "image_height": image_quality.height,
+        "image_mode": image_quality.mode,
+        "image_warnings": list(image_quality.warnings),
+        "has_critical_warnings": _has_critical_warnings(audio_quality.warnings, image_quality.warnings),
+    }
+
+    physiology_payload = {
+        "features": features.__dict__,
+        "proxies": proxies.__dict__,
+        "explanations": explanations,
+    }
+
+    structured_input = _build_structured_input(
+        intake_text=intake_text,
+        mode=mode,
+        signals=signals,
+        physiology=physiology_payload,
+        quality=quality_payload,
+    )
+
+    llm = PlaceholderLLM()
+    llm_output = llm.generate(structured_input)
+
+    return {
+        "mode": mode,
+        "input": structured_input,
+        "llm_output": llm_output,
+        "encoder_metadata": {
+            "audio": audio_encoder.metadata.__dict__,
+            "image": image_encoder.metadata.__dict__,
+        },
+    }
+
+
+def run_pipeline_modes(
+    audio_path: str,
+    image_path: str,
+    intake_text: str,
+    config: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    outputs = {}
+    for mode in ("llm_only", "signals", "signals+physiology"):
+        outputs[mode] = run_pipeline(audio_path, image_path, intake_text, mode, config)
+    return outputs
+
+
+def _build_structured_input(
+    intake_text: str,
+    mode: str,
+    signals: Dict[str, Any],
+    physiology: Dict[str, Any],
+    quality: Dict[str, Any],
+) -> Dict[str, Any]:
+    payload = {
+        "intake_text": intake_text,
+        "mode": mode,
+        "quality": quality,
+    }
+    if mode in ("signals", "signals+physiology"):
+        payload["signals"] = signals
+    if mode == "signals+physiology":
+        payload["physiology"] = physiology
+    return payload
+
+
+def _has_critical_warnings(audio_warnings, image_warnings) -> bool:
+    critical_audio = "audio_too_short" in audio_warnings
+    critical_image = "low_resolution" in image_warnings
+    return bool(critical_audio or critical_image)
+
+
+def to_json(data: Dict[str, Any]) -> str:
+    return json.dumps(data, indent=2)

@@ -1,0 +1,4 @@
+use_stub_encoders: true
+audio_checkpoint: null
+image_checkpoint: null
+llm_adapter: placeholder
