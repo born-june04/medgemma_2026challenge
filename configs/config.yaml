@@ -1,4 +1,4 @@
-use_stub_encoders: true
-audio_checkpoint: null
+use_stub_encoders: false
+audio_checkpoint: "google/hear-pytorch"
 image_checkpoint: null
 llm_adapter: placeholder

@@ -1,6 +1,8 @@
 numpy
-torch
+torch==2.6.0
 streamlit
 pillow
 soundfile
 pyyaml
+transformers==4.50.3
+huggingface_hub==0.36.0
