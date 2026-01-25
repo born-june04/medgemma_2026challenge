@@ -4,5 +4,6 @@ streamlit
 pillow
 soundfile
 pyyaml
-transformers==4.50.3
+transformers==4.40.0
 huggingface_hub==0.36.0
+scipy
