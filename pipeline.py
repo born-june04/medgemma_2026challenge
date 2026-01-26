@@ -11,6 +11,10 @@ from signals.audio_signals import audio_anomaly_score
 from signals.image_signals import cxr_abnormality_score
 from signals.quality import compute_audio_quality, compute_image_quality, load_audio_mono, load_image
 
+from classifiers.audio_head import load_head_from_ckpt
+import torch
+
+
 
 DEFAULT_CONFIG_PATH = Path("configs/config.yaml")
 
@@ -21,6 +25,11 @@ def load_config(path: Optional[str] = None) -> Dict[str, Any]:
         with open(config_path, "r", encoding="utf-8") as handle:
             return yaml.safe_load(handle) or {}
     return {}
+
+
+def _is_image_path(p: str) -> bool:
+    lower = p.lower()
+    return lower.endswith(".png") or lower.endswith(".jpg") or lower.endswith(".jpeg")
 
 
 def run_pipeline(
@@ -39,15 +48,61 @@ def run_pipeline(
     audio_embedding = audio_encoder.encode(audio_path)
     image_embedding = image_encoder.encode(image_path)
 
-    audio, sr = load_audio_mono(audio_path)
-    audio_quality = compute_audio_quality(audio, sr)
+    audio_is_image = _is_image_path(audio_path)
+    if not audio_is_image:
+        audio, sr = load_audio_mono(audio_path)
+        audio_quality = compute_audio_quality(audio, sr)
     image = load_image(image_path)
     image_quality = compute_image_quality(image)
+
+
+    # --- Optional audio classification head inference ---
+    classification_payload = None
+    acfg = (config.get("audio_classifier") or {})
+    if acfg.get("enabled", False):
+        ckpt_path = acfg.get("checkpoint_path", "artifacts/audio_classifier_head.pt")
+        ckpt_file = Path(ckpt_path)
+        if ckpt_file.exists():
+            # Load head and run inference
+            try:
+                classifier, idx_to_class = load_head_from_ckpt(str(ckpt_file))
+                # Ensure encoder embedding dim matches head
+                D_encoder = int(audio_encoder.metadata.embedding_dim)
+                D_head = classifier.net[0].normalized_shape[0] if hasattr(classifier.net[0], "normalized_shape") else None
+                if D_head is not None and D_head != D_encoder:
+                    # If mismatch, fail silently but informative in logs
+                    print(f"[audio_classifier] Embedding dim mismatch: encoder {D_encoder} vs head {D_head}. Skipping inference.")
+                else:
+                    with torch.no_grad():
+                        emb = audio_embedding
+                        if isinstance(emb, torch.Tensor):
+                            emb = emb.detach().cpu()
+                        logits = classifier(emb)  # shape [1, C]
+                        probs = torch.softmax(logits, dim=-1).squeeze(0)  # [C]
+                        pred_idx = int(torch.argmax(probs).item())
+                        classes = [idx_to_class[i] for i in range(len(probs))]
+                        classification_payload = {
+                            "pred_label": idx_to_class.get(pred_idx, str(pred_idx)),
+                            "pred_index": pred_idx,
+                            "probs": [float(p) for p in probs.tolist()],
+                            "classes": classes,
+                        }
+            except Exception as e:
+                # Non-fatal: pipeline continues without classification
+                print(f"[audio_classifier] Inference error: {e}")
+        else:
+            # Silent skip if no checkpoint
+            pass
+
 
     signals = {
         "audio_anomaly_score": audio_anomaly_score(audio_embedding),
         "cxr_abnormality_score": cxr_abnormality_score(image_embedding),
     }
+
+    if classification_payload is not None:
+        signals["audio_classification"] = classification_payload
+
 
     features = extract_audio_features(audio_path)
     proxies = compute_proxies(features)

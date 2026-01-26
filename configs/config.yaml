@@ -2,3 +2,33 @@ use_stub_encoders: false
 audio_checkpoint: "google/hear-pytorch"
 image_checkpoint: null
 llm_adapter: placeholder
+
+# --- Audio classifier head (new) ---
+audio_classifier:
+  enabled: true                          # When true, pipeline can run classifier inference if ckpt exists
+  checkpoint_path: artifacts/audio_classifier_head.pt
+
+  # Training is a separate, explicit step. Keep this false unless your training script wants to use it.
+  auto_train_if_missing: false
+
+  # IMPORTANT: Set this to the 'dataset' directory level:
+  #   <dataset_root>/
+  #     <class_A>/CSI/*.png
+  #     <class_B>/CSI/*.png
+  dataset_root: "data/Chest Diseases Dataset"
+
+  # Where to store the cached embeddings from the frozen encoder (for fast training)
+  cache_path: artifacts/audio_embeddings_cache.pt
+
+  # Head architecture: null => Linear head; set an integer (e.g., 256) for a tiny MLP
+  hidden_dim: 256
+  dropout: 0.1
+
+  # Training hyperparameters (used only by the training step)
+  batch_size: 64
+  lr: 0.001
+  weight_decay: 0.0001
+  max_epochs: 30
+  val_ratio: 0.2
+  early_stopping_patience: 5
+  amp: true
