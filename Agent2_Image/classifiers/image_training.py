@@ -232,7 +232,8 @@ def train_image_classifier_head(
     num_classes = len(class_to_idx) if class_to_idx else int(y.max().item()) + 1
 
     N = X.shape[0]
-    val_size = max(1, int(N * val_ratio))
+    # val_size = max(1, int(N * val_ratio))
+    val_size = 0
     train_size = N - val_size
     g = torch.Generator().manual_seed(1337)
     train_ds, val_ds = random_split(TensorDataset(X, y), [train_size, val_size], generator=g)
@@ -243,7 +244,8 @@ def train_image_classifier_head(
         train_loader = DataLoader(train_ds, batch_sampler=batch_sampler)
     else:
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    # val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    val_loader = train_loader
 
     model = ImageClassifier(input_dim=D, num_classes=num_classes, hidden_dim=hidden_dim, dropout=dropout).to(device)
 
