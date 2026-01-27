@@ -126,9 +126,9 @@ def run_pipeline(
     )
 
     return {
-        "audio_embedding": audio_embedding,
-        "image_embedding": image_embedding,
-        "fused_image_embedding": fused_image_embedding,
+        # "audio_embedding": audio_embedding,
+        # "image_embedding": image_embedding,
+        # "fused_image_embedding": fused_image_embedding,
         "audio_classification": classification_payload,
         "encoder_metadata": {
             "audio": audio_encoder.metadata.__dict__,
