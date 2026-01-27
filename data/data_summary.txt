@@ -1,0 +1,43 @@
+================================================================================
+Data Summary by Type (After Extraction)
+================================================================================
+Label                               CSI          CT Scan      CXR         Total       
+--------------------------------------------------------------------------------
+1. COVID-19                         28           5            17           50          
+2. Lungs Cancer                     30           7            5            42          
+3. Consolidation Lung               18           5            3            26          
+4. Atelectasis                      25           4            4            33          
+5. Tuberculosis                     27           4            6            37          
+6. Pneumothorax                     18           5            4            27          
+7. Edema                            18           5            9            32          
+8. Pneumonia                        16           10           15           41          
+9. Normal                           24           6            8            38          
+--------------------------------------------------------------------------------
+TOTAL                               204          51           71           326         
+================================================================================
+
+Details:
+- CSI: Scalogram PNG image files (Total: 204)
+- CT Scan: CT scan images (JPEG, JPG, PNG formats, Total: 51)
+- CXR: Chest X-Ray images (JPEG, JPG formats, Total: 71)
+
+File Format Distribution:
+- CSI: All PNG format
+- CT Scan: Mixed JPEG, JPG, PNG
+- CXR: Mixed JPEG, JPG
+
+Dataset Location:
+- medgemma_2026challenge/data/Chest Diseases Dataset/
+
+Total Data Count by Label:
+1. COVID-19: 50 files (CSI 28, CT Scan 5, CXR 17)
+2. Lungs Cancer: 42 files (CSI 30, CT Scan 7, CXR 5)
+3. Consolidation Lung: 26 files (CSI 18, CT Scan 5, CXR 3)
+4. Atelectasis: 33 files (CSI 25, CT Scan 4, CXR 4)
+5. Tuberculosis: 37 files (CSI 27, CT Scan 4, CXR 6)
+6. Pneumothorax: 27 files (CSI 18, CT Scan 5, CXR 4)
+7. Edema: 32 files (CSI 18, CT Scan 5, CXR 9)
+8. Pneumonia: 41 files (CSI 16, CT Scan 10, CXR 15)
+9. Normal: 38 files (CSI 24, CT Scan 6, CXR 8)
+
+Grand Total: 326 files

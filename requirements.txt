@@ -1,9 +1,13 @@
-numpy
-torch==2.6.0
+numpy==1.26.4
+torch==2.10.0
+torchaudio==2.10.0
+torchvision==0.20.1
 streamlit
 pillow
 soundfile
 pyyaml
 transformers==4.40.0
+tokenizers==0.19.1
 huggingface_hub==0.36.0
-scipy
+scipy==1.17.0
+sentencepiece==0.2.0
