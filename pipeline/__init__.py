@@ -1,4 +1,10 @@
-from .core import load_config, run_pipeline, run_pipeline_modes, to_json
+"""
+Pipeline package.
 
-__all__ = ["load_config", "run_pipeline", "run_pipeline_modes", "to_json"]
+Keep this module lightweight so that `pipeline.reporting.*` can be imported
+inside a separate environment (e.g., MedGemma env) without pulling in the full
+audio/image stack and their dependencies.
+"""
+
+__all__ = []
 

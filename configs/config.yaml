@@ -4,6 +4,8 @@ audio_checkpoint: "google/hear-pytorch"
 image_checkpoint: "google/medsiglip-448"
 llm_adapter: placeholder
 hf_token: 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
+# Put Hugging Face caches on scratch to avoid /mmfs1/home quota issues
+hf_home: "/gscratch/scrubbed/june0604/.cache/huggingface"
 
 physiology:
   enabled: False
@@ -15,7 +17,7 @@ report:
   model_id: "google/medgemma-1.5-4b-it"
   # Optional: run report generation in a separate Python environment to avoid transformers version conflicts.
   # Example: "/gscratch/scrubbed/june0604/conda-envs/medgemma/bin/python"
-  python_exe: ""
+  python_exe: "/gscratch/scrubbed/june0604/conda-envs/medgemma/bin/python"
   output_dir: "outputs/reports"
   max_new_tokens: 512
   temperature: 0.2

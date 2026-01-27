@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import subprocess
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -101,6 +102,13 @@ def run_pipeline(
     """
     config = config or {}
     use_stub = bool(config.get("use_stub_encoders", True))
+
+    # Prefer scratch for Hugging Face caches to avoid home quota issues.
+    hf_home = str(config.get("hf_home") or "").strip()
+    if hf_home:
+        os.environ.setdefault("HF_HOME", hf_home)
+        os.environ.setdefault("HF_HUB_CACHE", str(Path(hf_home) / "hub"))
+        os.environ.setdefault("TRANSFORMERS_CACHE", str(Path(hf_home) / "hub"))
 
     # Ensure HF auth is available for gated models (MedSigLIP / MedGemma).
     if config.get("hf_token") and not os.environ.get("HF_TOKEN"):
@@ -243,20 +251,74 @@ def run_pipeline(
             if not model_id:
                 raise ValueError("report.model_id (or report.checkpoint) must be set")
 
-            report_payload = generate_medgemma_report(
-                {
-                    "patient_id": pid,
-                    "audio_path": str(audio_path),
-                    "image_path": str(image_path),
-                    "audio_classification": classification_payload,
-                    "physiology": physiology_payload,
-                    "visual_evidence": gradcam_payload,
-                },
-                model_id=model_id,
-                out_dir=str(report_out),
-                max_new_tokens=int(rcfg.get("max_new_tokens", 512)),
-                temperature=float(rcfg.get("temperature", 0.2)),
-            )
+            report_inputs = {
+                "patient_id": pid,
+                "audio_path": str(audio_path),
+                "image_path": str(image_path),
+                "audio_classification": classification_payload,
+                "physiology": physiology_payload,
+                "visual_evidence": gradcam_payload,
+            }
+
+            python_exe = str(rcfg.get("python_exe") or "").strip()
+            if python_exe:
+                report_out.mkdir(parents=True, exist_ok=True)
+                inputs_json = report_out / "inputs.json"
+                inputs_json.write_text(json.dumps(report_inputs, indent=2), encoding="utf-8")
+
+                env = os.environ.copy()
+                # Ensure the repo is importable in the external env.
+                project_root = str(Path(__file__).resolve().parent.parent)
+                env["PYTHONPATH"] = project_root + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
+                # Propagate HF token if present in config.
+                if config.get("hf_token") and not env.get("HF_TOKEN"):
+                    env["HF_TOKEN"] = str(config["hf_token"])
+
+                cmd = [
+                    python_exe,
+                    "-m",
+                    "pipeline.reporting.runner",
+                    "--model-id",
+                    model_id,
+                    "--inputs-json",
+                    str(inputs_json),
+                    "--out-dir",
+                    str(report_out),
+                    "--max-new-tokens",
+                    str(int(rcfg.get("max_new_tokens", 512))),
+                    "--temperature",
+                    str(float(rcfg.get("temperature", 0.2))),
+                ]
+                proc = subprocess.run(cmd, env=env, capture_output=True, text=True)
+                if proc.returncode != 0:
+                    report_payload = {
+                        "ok": False,
+                        "model_id": model_id,
+                        "error": (proc.stderr or proc.stdout or f"runner failed with code {proc.returncode}").strip(),
+                        "paths": {
+                            "inputs_json": str(inputs_json),
+                            "out_dir": str(report_out),
+                        },
+                    }
+                else:
+                    try:
+                        report_payload = json.loads(proc.stdout.strip() or "{}")
+                    except Exception:
+                        report_payload = {
+                            "ok": False,
+                            "model_id": model_id,
+                            "error": "runner returned non-JSON output",
+                            "raw": proc.stdout,
+                            "paths": {"inputs_json": str(inputs_json), "out_dir": str(report_out)},
+                        }
+            else:
+                report_payload = generate_medgemma_report(
+                    report_inputs,
+                    model_id=model_id,
+                    out_dir=str(report_out),
+                    max_new_tokens=int(rcfg.get("max_new_tokens", 512)),
+                    temperature=float(rcfg.get("temperature", 0.2)),
+                )
         except Exception as exc:
             report_payload = {"ok": False, "error": str(exc)}
 

@@ -26,7 +26,9 @@ import torch
 from PIL import Image
 import torch.nn.functional as F
 from huggingface_hub import login
-login(token="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")
+_hf_token = os.environ.get("HF_TOKEN")
+if _hf_token:
+    login(token=_hf_token)
 
 TRANSFORMERS_AVAILABLE = True
 import transformers
@@ -119,6 +121,8 @@ class HeARAudioEncoder(AudioEncoderBase):
                         "trust_remote_code": True,
                         "local_files_only": False,
                         "torch_dtype": torch.float32,
+                        # HeAR embeddings use hidden states; pooler is not required and can mismatch.
+                        "add_pooling_layer": False,
                     }
                 },
                 {
@@ -127,6 +131,7 @@ class HeARAudioEncoder(AudioEncoderBase):
                         "trust_remote_code": True,
                         "local_files_only": False,
                         "ignore_mismatched_sizes": True,
+                        "add_pooling_layer": False,
                     }
                 },
                 {
@@ -135,6 +140,7 @@ class HeARAudioEncoder(AudioEncoderBase):
                         "trust_remote_code": True,
                         "use_safetensors": False,
                         "ignore_mismatched_sizes": True,
+                        "add_pooling_layer": False,
                     }
                 },
             ]

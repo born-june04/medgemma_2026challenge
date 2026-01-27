@@ -1,1 +1,0 @@
-The checkpoint you are trying to load has model type `gemma3` but Transformers does not recognize this architecture. This could be because of an issue with the checkpoint, or because your version of Transformers is out of date.
