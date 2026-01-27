@@ -3,7 +3,7 @@ from typing import Dict, Tuple
 
 import numpy as np
 
-from signals.quality import load_audio_mono
+from Agent1_Audio.signals.quality import load_audio_mono
 
 
 @dataclass

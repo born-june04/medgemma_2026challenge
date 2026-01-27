@@ -5,6 +5,21 @@ image_checkpoint: "google/medsiglip-448"
 llm_adapter: placeholder
 hf_token: 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
 
+physiology:
+  enabled: False
+  output_dir: "outputs/evidence/physiology"
+
+report:
+  enabled: True
+  # Set to a HF text model id (e.g., a MedGemma instruction-tuned checkpoint you have access to)
+  model_id: "google/medgemma-1.5-4b-it"
+  # Optional: run report generation in a separate Python environment to avoid transformers version conflicts.
+  # Example: "/gscratch/scrubbed/june0604/conda-envs/medgemma/bin/python"
+  python_exe: ""
+  output_dir: "outputs/reports"
+  max_new_tokens: 512
+  temperature: 0.2
+
 # --- Audio classifier head (new) ---
 audio_classifier:
   enabled: true                          # When true, pipeline can run classifier inference if ckpt exists
@@ -54,18 +69,18 @@ image_classifier:
   amp: False
 
 image_finetune:
-  enabled: True
-  batch_size: 36
-  lr_attn: 0.001
-  lr_head: 0.000001
+  enabled: False
+  batch_size: 9
+  lr_attn: 0.000001
+  lr_head: 0.0001
   weight_decay: 0.0001
-  max_epochs: 100
+  max_epochs: 50
   val_ratio: 0.2
   amp: True
   balanced_sampling: True
 
 gradcam:
   enabled: True
-  targets: ["text", "attention", "attn_grad"]
+  targets: ["occlusion"] # occlusion (mean baseline; increase+decrease overlays)
   output_dir: "outputs/gradcam"
-  alpha: 0.4
+  alpha: 0.3

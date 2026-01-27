@@ -167,7 +167,6 @@ def finetune_attention_encoder(
     val_ratio: float = 0.2,
     amp: bool = True,
     balanced_sampling: bool = True,
-    use_tqdm: bool = True,
 ) -> ImageClassifier:
     if not hasattr(encoder, "_load_model"):
         raise ValueError("Encoder does not support fine-tuning.")
@@ -196,9 +195,9 @@ def finetune_attention_encoder(
 
     labels = torch.tensor([y for _, y in dataset.samples], dtype=torch.long)
     N = len(dataset)
-    val_size = max(1, int(N * val_ratio)) if N > 1 else 0
-    train_size = N - val_size
-    if val_size > 0:
+    if val_ratio > 0 and N > 1:
+        val_size = max(1, int(N * val_ratio))
+        train_size = N - val_size
         train_ds, val_ds = random_split(
             dataset,
             [train_size, val_size],
@@ -213,11 +212,11 @@ def finetune_attention_encoder(
         train_loader = DataLoader(train_ds, batch_sampler=sampler, collate_fn=lambda b: b)
     else:
         train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda b: b)
-    val_loader = (
-        DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=lambda b: b)
-        if val_ds is not None
-        else None
-    )
+    if val_ds is not None:
+        val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=lambda b: b)
+    else:
+        val_loader = train_loader
+    val_loader = train_loader
 
     ce = nn.CrossEntropyLoss()
     opt = torch.optim.AdamW(
@@ -265,10 +264,13 @@ def finetune_attention_encoder(
         metrics = _compute_metrics(torch.cat(all_logits), torch.cat(all_labels))
         return val_loss, metrics
 
-    for epoch in range(max_epochs):
-        iterator = train_loader
-        if use_tqdm:
-            iterator = tqdm(train_loader, desc=f"[finetune] epoch {epoch+1}/{max_epochs}")
+    epoch_pbar = tqdm(range(1, max_epochs + 1), desc="[finetune] Epochs")
+    for epoch in epoch_pbar:
+        iterator = tqdm(train_loader, desc=f"Train {epoch}", leave=False)
+        train_logits = []
+        train_labels = []
+        losses = 0.0
+        total = 0
         for batch in iterator:
             paths, ys = zip(*batch)
             images = [Image.open(p).convert("RGB") for p in paths]
@@ -277,7 +279,7 @@ def finetune_attention_encoder(
             yb = torch.tensor(ys, dtype=torch.long, device=device)
 
             opt.zero_grad(set_to_none=True)
-            with torch.cuda.amp.autocast(enabled=amp and device.type == "cuda"):
+            with torch.amp.autocast(device_type="cuda", enabled=amp and device.type == "cuda"):
                 vision_outputs = model.vision_model(
                     pixel_values=pixel_values,
                     output_hidden_states=False,
@@ -300,16 +302,34 @@ def finetune_attention_encoder(
             scaler.scale(loss).backward()
             scaler.step(opt)
             scaler.update()
+            losses += loss.item() * yb.size(0)
+            total += yb.numel()
+            train_logits.append(logits.detach().cpu())
+            train_labels.append(yb.detach().cpu())
+
+        train_loss = losses / max(1, total)
+        train_metrics = _compute_metrics(torch.cat(train_logits), torch.cat(train_labels))
+        postfix = {
+            "train_loss": f"{train_loss:.4f}",
+            "train_acc": f"{train_metrics['acc']:.4f}",
+            "train_auc": f"{train_metrics['auc_roc']:.4f}",
+            "train_sens": f"{train_metrics['sensitivity']:.4f}",
+            "train_spec": f"{train_metrics['specificity']:.4f}",
+        }
         if val_loader is not None:
-            val_loss, metrics = _eval(val_loader)
-            if use_tqdm and hasattr(iterator, "set_postfix"):
-                iterator.set_postfix(
-                    val_loss=f"{val_loss:.4f}",
-                    acc=f"{metrics['acc']:.4f}",
-                    auc=f"{metrics['auc_roc']:.4f}",
-                    sens=f"{metrics['sensitivity']:.4f}",
-                    spec=f"{metrics['specificity']:.4f}",
-                )
+            val_loss, val_metrics = _eval(val_loader)
+            postfix.update(
+                {
+                    "val_loss": f"{val_loss:.4f}",
+                    "val_acc": f"{val_metrics['acc']:.4f}",
+                    "val_auc": f"{val_metrics['auc_roc']:.4f}",
+                    "val_sens": f"{val_metrics['sensitivity']:.4f}",
+                    "val_spec": f"{val_metrics['specificity']:.4f}",
+                }
+            )
+        postfix["lr_attn"] = f"{opt.param_groups[0]['lr']:.2e}"
+        postfix["lr_head"] = f"{opt.param_groups[1]['lr']:.2e}"
+        epoch_pbar.set_postfix(postfix)
 
     model.eval()
     return head

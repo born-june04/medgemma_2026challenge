@@ -2,17 +2,21 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
 import torch
 import yaml
+from huggingface_hub import login
 
 from Agent1_Audio.encoders import get_audio_encoder
 from Agent1_Audio.classifiers.audio_head import load_head_from_ckpt
+from Agent1_Audio.physiology.features import extract_audio_features
 from Agent2_Image.encoders import get_image_encoder
 from Agent2_Image.classifiers.image_head import load_head_from_ckpt as load_image_head
-from Agent2_Image.utils.gradcam_utils import save_overlay, save_raw_heatmap, save_original
+from Agent2_Image.utils.gradcam_utils import save_original, save_overlay_with_colorbar
+from pipeline.reporting import generate_medgemma_report
 
 
 DEFAULT_CONFIG_PATH = Path("configs/config.yaml")
@@ -98,6 +102,16 @@ def run_pipeline(
     config = config or {}
     use_stub = bool(config.get("use_stub_encoders", True))
 
+    # Ensure HF auth is available for gated models (MedSigLIP / MedGemma).
+    if config.get("hf_token") and not os.environ.get("HF_TOKEN"):
+        os.environ["HF_TOKEN"] = str(config["hf_token"])
+    if os.environ.get("HF_TOKEN"):
+        try:
+            login(token=os.environ["HF_TOKEN"])
+        except Exception:
+            # Non-fatal: downstream downloads may still succeed via cached credentials.
+            pass
+
     if patient_id:
         pairs_index = pairs_index or config.get("pairs_index")
         if not pairs_index:
@@ -127,6 +141,21 @@ def run_pipeline(
         classification_payload["probs"] if classification_payload else None,
     )
 
+    physiology_payload = None
+    pcfg = (config.get("physiology") or {})
+    if pcfg.get("enabled", False):
+        try:
+            physiology_payload = extract_audio_features(audio_path).__dict__
+            out_dir = Path(str(pcfg.get("output_dir", "outputs/evidence/physiology"))) / (
+                patient_id or Path(audio_path).stem
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "physiology.json").write_text(
+                json.dumps(physiology_payload, indent=2), encoding="utf-8"
+            )
+        except Exception as exc:
+            physiology_payload = {"error": str(exc)}
+
     gradcam_payload = None
     gcfg = (config.get("gradcam") or {})
     if gcfg.get("enabled", False):
@@ -135,54 +164,111 @@ def run_pipeline(
         alpha = float(gcfg.get("alpha", 0.4))
         gradcam_payload = {}
 
-        if "embedding" in targets:
+        if "occlusion" in targets:
             try:
-                heatmap = image_encoder.gradcam(image_path, target="embedding")
-                pid = patient_id or Path(image_path).stem
-                label_name = "unknown"
-                out_dir = Path(output_dir) / pid / label_name
-                gradcam_payload["original"] = save_original(
-                    image_path, str(out_dir / "original.png")
-                )
-                out_overlay = out_dir / "embedding_overlay.png"
-                out_raw = out_dir / "embedding_raw.png"
-                gradcam_payload["embedding_overlay"] = save_overlay(
-                    image_path, heatmap, str(out_overlay), alpha=alpha
-                )
-                gradcam_payload["embedding_raw"] = save_raw_heatmap(
-                    heatmap, str(out_raw)
-                )
-            except Exception as exc:
-                gradcam_payload["embedding_error"] = str(exc)
+                # Build label texts from dataset_root (preferred) or fall back to audio classifier class list.
+                icfg = (config.get("image_classifier") or {})
+                dataset_root = icfg.get("dataset_root")
+                label_texts = []
+                if dataset_root:
+                    root = Path(str(dataset_root))
+                    if root.exists():
+                        label_texts = sorted([p.name for p in root.iterdir() if p.is_dir()])
+                if not label_texts and classification_payload and classification_payload.get("classes"):
+                    label_texts = list(classification_payload["classes"])
+                if not label_texts:
+                    raise ValueError("No label texts available for occlusion. Set image_classifier.dataset_root or run audio_classifier.")
 
-        if "classifier" in targets:
-            icfg = (config.get("image_classifier") or {})
-            ckpt = icfg.get("checkpoint_path", "artifacts/image_classifier_head.pt")
-            try:
-                classifier, _ = load_image_head(ckpt)
-                heatmap = image_encoder.gradcam(
-                    image_path, target="classifier", classifier=classifier
-                )
+                # Predict class index via text similarity for stable patient-level label selection.
+                pred = image_encoder.predict_text(image_path, texts=label_texts)
+                pred_idx = int(pred["pred_index"])
+                label_name = str(pred["pred_label"])
+
                 pid = patient_id or Path(image_path).stem
-                label_name = "unknown"
                 out_dir = Path(output_dir) / pid / label_name
-                out_overlay = out_dir / "classifier_overlay.png"
-                out_raw = out_dir / "classifier_raw.png"
-                gradcam_payload["classifier_overlay"] = save_overlay(
-                    image_path, heatmap, str(out_overlay), alpha=alpha
+                gradcam_payload["original"] = save_original(image_path, str(out_dir / "original.png"))
+                gradcam_payload["pred"] = pred
+
+                # Occlusion parameters (configurable)
+                ocfg = (gcfg.get("occlusion") or {})
+                patch_size = int(ocfg.get("patch_size", 32))
+                stride = int(ocfg.get("stride", 32))
+                batch_size = int(ocfg.get("batch_size", 16))
+
+                heat_dec = image_encoder.occlusion_map(
+                    image_path,
+                    texts=label_texts,
+                    class_index=pred_idx,
+                    patch_size=patch_size,
+                    stride=stride,
+                    batch_size=batch_size,
+                    baseline="mean",
+                    mode="decrease",
                 )
-                gradcam_payload["classifier_raw"] = save_raw_heatmap(
-                    heatmap, str(out_raw)
+                heat_inc = image_encoder.occlusion_map(
+                    image_path,
+                    texts=label_texts,
+                    class_index=pred_idx,
+                    patch_size=patch_size,
+                    stride=stride,
+                    batch_size=batch_size,
+                    baseline="mean",
+                    mode="increase",
+                )
+
+                gradcam_payload["occlusion_decrease_overlay"] = save_overlay_with_colorbar(
+                    image_path,
+                    heat_dec,
+                    str(out_dir / "occlusion_decrease_overlay.png"),
+                    alpha=alpha,
+                    title="occlusion decrease = evidence-for",
+                )
+                gradcam_payload["occlusion_increase_overlay"] = save_overlay_with_colorbar(
+                    image_path,
+                    heat_inc,
+                    str(out_dir / "occlusion_increase_overlay.png"),
+                    alpha=alpha,
+                    title="occlusion increase = distractor",
                 )
             except Exception as exc:
-                gradcam_payload["classifier_error"] = str(exc)
+                gradcam_payload["occlusion_error"] = str(exc)
+
+    report_payload = None
+    rcfg = (config.get("report") or {})
+    if rcfg.get("enabled", False):
+        try:
+            pid = patient_id or Path(audio_path).stem
+            report_out = Path(str(rcfg.get("output_dir", "outputs/reports"))) / pid
+            model_id = str(rcfg.get("model_id") or rcfg.get("checkpoint") or "").strip()
+            if not model_id:
+                raise ValueError("report.model_id (or report.checkpoint) must be set")
+
+            report_payload = generate_medgemma_report(
+                {
+                    "patient_id": pid,
+                    "audio_path": str(audio_path),
+                    "image_path": str(image_path),
+                    "audio_classification": classification_payload,
+                    "physiology": physiology_payload,
+                    "visual_evidence": gradcam_payload,
+                },
+                model_id=model_id,
+                out_dir=str(report_out),
+                max_new_tokens=int(rcfg.get("max_new_tokens", 512)),
+                temperature=float(rcfg.get("temperature", 0.2)),
+            )
+        except Exception as exc:
+            report_payload = {"ok": False, "error": str(exc)}
 
     return {
+        "patient_id": patient_id,
         "audio_embedding": audio_embedding,
         "image_embedding": image_embedding,
         "fused_image_embedding": fused_image_embedding,
         "audio_classification": classification_payload,
+        "physiology": physiology_payload,
         "gradcam": gradcam_payload,
+        "report": report_payload,
         "encoder_metadata": {
             "audio": audio_encoder.metadata.__dict__,
             "image": image_encoder.metadata.__dict__,

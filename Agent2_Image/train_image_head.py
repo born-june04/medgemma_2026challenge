@@ -30,7 +30,12 @@ from Agent2_Image.classifiers.image_training import (
     precompute_embeddings,
     train_image_classifier_head,
 )
-from Agent2_Image.utils.gradcam_utils import save_overlay, save_raw_heatmap, save_original
+from Agent2_Image.utils.gradcam_utils import (
+    save_overlay,
+    save_overlay_with_colorbar,
+    save_raw_heatmap,
+    save_original,
+)
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -261,6 +266,35 @@ def main() -> None:
                 out_raw = out_dir / "attn_grad_raw.png"
                 save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
                 save_raw_heatmap(heatmap, str(out_raw))
+
+            if "occlusion" in targets:
+                # Mean-baseline occlusion maps (overlay only; no raw files)
+                common = dict(
+                    texts=label_texts,
+                    class_index=label_idx,
+                    patch_size=32,
+                    stride=32,
+                    batch_size=16,
+                    baseline="mean",
+                )
+
+                heat_dec = encoder.occlusion_map(path, mode="decrease", **common)
+                save_overlay_with_colorbar(
+                    path,
+                    heat_dec,
+                    str(out_dir / "occlusion_decrease_overlay.png"),
+                    alpha=alpha,
+                    title="occlusion decrease = evidence-for",
+                )
+
+                heat_inc = encoder.occlusion_map(path, mode="increase", **common)
+                save_overlay_with_colorbar(
+                    path,
+                    heat_inc,
+                    str(out_dir / "occlusion_increase_overlay.png"),
+                    alpha=alpha,
+                    title="occlusion increase = distractor",
+                )
 
             if len(seen) >= len(ds.idx_to_class):
                 break
