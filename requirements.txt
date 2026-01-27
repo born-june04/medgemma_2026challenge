@@ -11,3 +11,4 @@ tokenizers==0.19.1
 huggingface_hub==0.36.0
 scipy==1.17.0
 sentencepiece==0.2.0
+protobuf==4.25.3

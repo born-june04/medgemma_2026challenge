@@ -73,8 +73,13 @@ class MedSigLIPImageEncoder(ImageEncoderBase):
             self.model.eval()
 
             if not self._embedding_dim_initialized:
-                if hasattr(self.model, "config") and hasattr(self.model.config, "projection_dim"):
-                    self.metadata.embedding_dim = int(self.model.config.projection_dim)
+                if hasattr(self.model, "config"):
+                    if hasattr(self.model.config, "projection_dim"):
+                        self.metadata.embedding_dim = int(self.model.config.projection_dim)
+                    elif hasattr(self.model.config, "vision_config") and hasattr(
+                        self.model.config.vision_config, "hidden_size"
+                    ):
+                        self.metadata.embedding_dim = int(self.model.config.vision_config.hidden_size)
                 self._embedding_dim_initialized = True
 
     def encode(self, image_path: str) -> torch.Tensor:
@@ -83,13 +88,16 @@ class MedSigLIPImageEncoder(ImageEncoderBase):
         inputs = self.processor(images=image, return_tensors="pt")
         inputs = {k: v.to(self._device) for k, v in inputs.items()}
         with torch.no_grad():
-            outputs = self.model(**inputs)
-        if hasattr(outputs, "image_embeds") and outputs.image_embeds is not None:
-            embedding = outputs.image_embeds
-        elif hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
-            embedding = outputs.pooler_output
-        else:
-            embedding = outputs.last_hidden_state.mean(dim=1)
+            if hasattr(self.model, "get_image_features"):
+                embedding = self.model.get_image_features(**inputs)
+            else:
+                outputs = self.model(**inputs)
+                if hasattr(outputs, "image_embeds") and outputs.image_embeds is not None:
+                    embedding = outputs.image_embeds
+                elif hasattr(outputs, "pooler_output") and outputs.pooler_output is not None:
+                    embedding = outputs.pooler_output
+                else:
+                    embedding = outputs.last_hidden_state.mean(dim=1)
         embedding = embedding.squeeze(0)
         if self._device.type == "cuda":
             embedding = embedding.cpu()
