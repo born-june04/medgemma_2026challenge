@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import random
 from collections import Counter, defaultdict
 from pathlib import Path
@@ -7,10 +8,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
+from PIL import Image
 from torch.utils.data import (
     BatchSampler,
     DataLoader,
     Dataset,
+    Subset,
     TensorDataset,
     random_split,
 )
@@ -150,6 +153,166 @@ def precompute_embeddings(encoder, dataset: Dataset, out_path: Optional[str] = N
         torch.save(pack, out_path)
 
     return pack
+
+
+def finetune_attention_encoder(
+    encoder,
+    dataset: ImageCXRDataset,
+    *,
+    batch_size: int = 8,
+    lr_attn: float = 1e-6,
+    lr_head: float = 1e-4,
+    weight_decay: float = 1e-4,
+    max_epochs: int = 3,
+    val_ratio: float = 0.2,
+    amp: bool = True,
+    balanced_sampling: bool = True,
+    use_tqdm: bool = True,
+) -> ImageClassifier:
+    if not hasattr(encoder, "_load_model"):
+        raise ValueError("Encoder does not support fine-tuning.")
+    encoder._load_model()
+    model = encoder.model
+    processor = encoder.processor
+    device = encoder._device
+
+    model.train()
+    # Freeze everything first
+    for p in model.parameters():
+        p.requires_grad = False
+    # Unfreeze attention weights in the vision tower
+    attn_params: List[nn.Parameter] = []
+    for name, p in model.vision_model.named_parameters():
+        if "attn" in name.lower() or "attention" in name.lower():
+            p.requires_grad = True
+            attn_params.append(p)
+    if not attn_params:
+        raise RuntimeError("No attention parameters found to fine-tune.")
+
+    input_dim = int(encoder.metadata.embedding_dim)
+    num_classes = len(dataset.class_to_idx)
+    head = ImageClassifier(input_dim=input_dim, num_classes=num_classes).to(device)
+    head.train()
+
+    labels = torch.tensor([y for _, y in dataset.samples], dtype=torch.long)
+    N = len(dataset)
+    val_size = max(1, int(N * val_ratio)) if N > 1 else 0
+    train_size = N - val_size
+    if val_size > 0:
+        train_ds, val_ds = random_split(
+            dataset,
+            [train_size, val_size],
+            generator=torch.Generator().manual_seed(1337),
+        )
+    else:
+        train_ds, val_ds = dataset, None
+
+    if balanced_sampling:
+        train_labels = torch.tensor([labels[i] for i in train_ds.indices], dtype=torch.long) if isinstance(train_ds, Subset) else labels
+        sampler = BalancedBatchSampler(train_labels, batch_size=batch_size, seed=1337)
+        train_loader = DataLoader(train_ds, batch_sampler=sampler, collate_fn=lambda b: b)
+    else:
+        train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, collate_fn=lambda b: b)
+    val_loader = (
+        DataLoader(val_ds, batch_size=batch_size, shuffle=False, collate_fn=lambda b: b)
+        if val_ds is not None
+        else None
+    )
+
+    ce = nn.CrossEntropyLoss()
+    opt = torch.optim.AdamW(
+        [
+            {"params": attn_params, "lr": lr_attn, "weight_decay": weight_decay},
+            {"params": head.parameters(), "lr": lr_head, "weight_decay": weight_decay},
+        ]
+    )
+    scaler = torch.cuda.amp.GradScaler(enabled=amp and device.type == "cuda")
+
+    def _eval(loader: DataLoader) -> Tuple[float, Dict[str, float]]:
+        model.eval()
+        head.eval()
+        losses = 0.0
+        total = 0
+        all_logits = []
+        all_labels = []
+        with torch.no_grad():
+            for batch in loader:
+                paths, ys = zip(*batch)
+                images = [Image.open(p).convert("RGB") for p in paths]
+                inputs = processor(images=images, return_tensors="pt")
+                pixel_values = inputs["pixel_values"].to(device)
+                yb = torch.tensor(ys, dtype=torch.long, device=device)
+                vision_outputs = model.vision_model(
+                    pixel_values=pixel_values,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                hidden = vision_outputs.last_hidden_state
+                tokens = hidden.shape[1]
+                if tokens > 1 and int(math.sqrt(tokens - 1)) ** 2 == tokens - 1:
+                    patch_tokens = hidden[:, 1:, :]
+                else:
+                    patch_tokens = hidden
+                pooled = patch_tokens.mean(dim=1)
+                image_embeds = model.visual_projection(pooled) if hasattr(model, "visual_projection") else pooled
+                logits = head(image_embeds)
+                loss = ce(logits, yb)
+                losses += loss.item() * yb.size(0)
+                total += yb.numel()
+                all_logits.append(logits.detach().cpu())
+                all_labels.append(yb.detach().cpu())
+        val_loss = losses / max(1, total)
+        metrics = _compute_metrics(torch.cat(all_logits), torch.cat(all_labels))
+        return val_loss, metrics
+
+    for epoch in range(max_epochs):
+        iterator = train_loader
+        if use_tqdm:
+            iterator = tqdm(train_loader, desc=f"[finetune] epoch {epoch+1}/{max_epochs}")
+        for batch in iterator:
+            paths, ys = zip(*batch)
+            images = [Image.open(p).convert("RGB") for p in paths]
+            inputs = processor(images=images, return_tensors="pt")
+            pixel_values = inputs["pixel_values"].to(device)
+            yb = torch.tensor(ys, dtype=torch.long, device=device)
+
+            opt.zero_grad(set_to_none=True)
+            with torch.cuda.amp.autocast(enabled=amp and device.type == "cuda"):
+                vision_outputs = model.vision_model(
+                    pixel_values=pixel_values,
+                    output_hidden_states=False,
+                    return_dict=True,
+                )
+                hidden = vision_outputs.last_hidden_state
+                tokens = hidden.shape[1]
+                if tokens > 1 and int(math.sqrt(tokens - 1)) ** 2 == tokens - 1:
+                    patch_tokens = hidden[:, 1:, :]
+                else:
+                    patch_tokens = hidden
+                pooled = patch_tokens.mean(dim=1)
+                if hasattr(model, "visual_projection"):
+                    image_embeds = model.visual_projection(pooled)
+                else:
+                    image_embeds = pooled
+                logits = head(image_embeds)
+                loss = ce(logits, yb)
+
+            scaler.scale(loss).backward()
+            scaler.step(opt)
+            scaler.update()
+        if val_loader is not None:
+            val_loss, metrics = _eval(val_loader)
+            if use_tqdm and hasattr(iterator, "set_postfix"):
+                iterator.set_postfix(
+                    val_loss=f"{val_loss:.4f}",
+                    acc=f"{metrics['acc']:.4f}",
+                    auc=f"{metrics['auc_roc']:.4f}",
+                    sens=f"{metrics['sensitivity']:.4f}",
+                    spec=f"{metrics['specificity']:.4f}",
+                )
+
+    model.eval()
+    return head
 
 
 def _binary_auc(y_true: torch.Tensor, y_score: torch.Tensor) -> float:

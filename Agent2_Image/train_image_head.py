@@ -26,9 +26,11 @@ from Agent2_Image.classifiers.image_head import ImageClassifier
 from Agent2_Image.classifiers.image_training import (
     ImageCXRDataset,
     _compute_metrics,
+    finetune_attention_encoder,
     precompute_embeddings,
     train_image_classifier_head,
 )
+from Agent2_Image.utils.gradcam_utils import save_overlay, save_raw_heatmap, save_original
 
 
 def load_config(path: str) -> Dict[str, Any]:
@@ -47,13 +49,14 @@ def _val_split_loaders(
     X: torch.Tensor = emb_pack["embeddings"]  # [N, D]
     y: torch.Tensor = emb_pack["labels"]      # [N]
     N = X.shape[0]
-    val_size = max(1, int(N * val_ratio))
+    # val_size = max(1, int(N * val_ratio))
+    val_size = 0
     train_size = N - val_size
     g = torch.Generator().manual_seed(seed)
     train_ds, val_ds = random_split(TensorDataset(X, y), [train_size, val_size], generator=g)
     train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
-    return train_loader, val_loader
+    # val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False)
+    return train_loader, train_loader
 
 
 def _evaluate_on_loader(
@@ -119,6 +122,7 @@ def main() -> None:
     dataset_root = icfg.get("dataset_root")
     cache_path = icfg.get("cache_path", "artifacts/image_embeddings_cache.pt")
     ckpt_path = icfg.get("checkpoint_path", "artifacts/image_classifier_head.pt")
+    ft_cfg = (cfg.get("image_finetune") or {})
 
     if not dataset_root:
         raise ValueError("configs.config.yaml -> image_classifier.dataset_root must be set")
@@ -131,6 +135,22 @@ def main() -> None:
     ds = ImageCXRDataset(dataset_root)
     print(f"[dataset] Found {len(ds)} files across {len(ds.idx_to_class)} classes:")
     print(json.dumps(ds.idx_to_class, indent=2))
+
+    if ft_cfg.get("enabled", False):
+        print("[finetune] Fine-tuning attention weights on CXR data...")
+        finetune_attention_encoder(
+            encoder,
+            ds,
+            batch_size=int(ft_cfg.get("batch_size", 8)),
+            lr_attn=float(ft_cfg.get("lr_attn", 1e-6)),
+            lr_head=float(ft_cfg.get("lr_head", 1e-4)),
+            weight_decay=float(ft_cfg.get("weight_decay", 1e-4)),
+            max_epochs=int(ft_cfg.get("max_epochs", 3)),
+            val_ratio=float(ft_cfg.get("val_ratio", 0.2)),
+            amp=bool(ft_cfg.get("amp", True)),
+            balanced_sampling=bool(ft_cfg.get("balanced_sampling", True)),
+        )
+        print("[finetune] Done.")
 
     cache_path = str(cache_path)
     if (not args.force_recache) and Path(cache_path).exists():
@@ -183,6 +203,67 @@ def main() -> None:
         f"specificity={metrics['specificity']:.4f}"
     )
     print("[classes]", json.dumps(idx_to_class, indent=2))
+
+    # After training, generate one Grad-CAM per label (one sample each)
+    gcfg = cfg.get("gradcam") or {}
+    if gcfg.get("enabled", False):
+        output_dir = gcfg.get("output_dir", "outputs/gradcam")
+        alpha = float(gcfg.get("alpha", 0.4))
+        targets = gcfg.get("targets", ["embedding"])
+        label_texts = [ds.idx_to_class[i] for i in range(len(ds.idx_to_class))]
+
+        seen = set()
+        for path, label_idx in ds.samples:
+            if label_idx in seen:
+                continue
+            seen.add(label_idx)
+            stem = Path(path).stem
+            label_name = ds.idx_to_class.get(label_idx, str(label_idx))
+            out_dir = Path(output_dir) / stem / label_name
+
+            save_original(path, str(out_dir / "original.png"))
+
+            if "embedding" in targets:
+                heatmap = encoder.gradcam(path, target="embedding")
+                out_overlay = out_dir / "embedding_overlay.png"
+                out_raw = out_dir / "embedding_raw.png"
+                save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
+                save_raw_heatmap(heatmap, str(out_raw))
+
+            if "classifier" in targets:
+                heatmap = encoder.gradcam(path, target="classifier", classifier=model)
+                out_overlay = out_dir / "classifier_overlay.png"
+                out_raw = out_dir / "classifier_raw.png"
+                save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
+                save_raw_heatmap(heatmap, str(out_raw))
+
+            if "text" in targets:
+                heatmap = encoder.gradcam(
+                    path, target="text", texts=label_texts, class_index=label_idx
+                )
+                out_overlay = out_dir / "text_overlay.png"
+                out_raw = out_dir / "text_raw.png"
+                save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
+                save_raw_heatmap(heatmap, str(out_raw))
+
+            if "attention" in targets:
+                heatmap = encoder.attention_rollout(path)
+                out_overlay = out_dir / "attention_overlay.png"
+                out_raw = out_dir / "attention_raw.png"
+                save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
+                save_raw_heatmap(heatmap, str(out_raw))
+
+            if "attn_grad" in targets:
+                heatmap = encoder.attn_gradcam(
+                    path, target="text", texts=label_texts, class_index=label_idx
+                )
+                out_overlay = out_dir / "attn_grad_overlay.png"
+                out_raw = out_dir / "attn_grad_raw.png"
+                save_overlay(path, heatmap, str(out_overlay), alpha=alpha)
+                save_raw_heatmap(heatmap, str(out_raw))
+
+            if len(seen) >= len(ds.idx_to_class):
+                break
 
 
 if __name__ == "__main__":

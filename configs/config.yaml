@@ -52,3 +52,20 @@ image_classifier:
   val_ratio: 0.2
   early_stopping_patience: 1024
   amp: False
+
+image_finetune:
+  enabled: True
+  batch_size: 36
+  lr_attn: 0.001
+  lr_head: 0.000001
+  weight_decay: 0.0001
+  max_epochs: 100
+  val_ratio: 0.2
+  amp: True
+  balanced_sampling: True
+
+gradcam:
+  enabled: True
+  targets: ["text", "attention", "attn_grad"]
+  output_dir: "outputs/gradcam"
+  alpha: 0.4

@@ -26,3 +26,8 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+## python pipeline.py \
+    # --config configs/config.yaml\
+    # --patient-id P0001\
+    # --pairs-index data/pairs.csv

@@ -11,6 +11,8 @@ import yaml
 from Agent1_Audio.encoders import get_audio_encoder
 from Agent1_Audio.classifiers.audio_head import load_head_from_ckpt
 from Agent2_Image.encoders import get_image_encoder
+from Agent2_Image.classifiers.image_head import load_head_from_ckpt as load_image_head
+from Agent2_Image.utils.gradcam_utils import save_overlay, save_raw_heatmap, save_original
 
 
 DEFAULT_CONFIG_PATH = Path("configs/config.yaml")
@@ -125,11 +127,62 @@ def run_pipeline(
         classification_payload["probs"] if classification_payload else None,
     )
 
+    gradcam_payload = None
+    gcfg = (config.get("gradcam") or {})
+    if gcfg.get("enabled", False):
+        targets = gcfg.get("targets", ["embedding"])
+        output_dir = gcfg.get("output_dir", "outputs/gradcam")
+        alpha = float(gcfg.get("alpha", 0.4))
+        gradcam_payload = {}
+
+        if "embedding" in targets:
+            try:
+                heatmap = image_encoder.gradcam(image_path, target="embedding")
+                pid = patient_id or Path(image_path).stem
+                label_name = "unknown"
+                out_dir = Path(output_dir) / pid / label_name
+                gradcam_payload["original"] = save_original(
+                    image_path, str(out_dir / "original.png")
+                )
+                out_overlay = out_dir / "embedding_overlay.png"
+                out_raw = out_dir / "embedding_raw.png"
+                gradcam_payload["embedding_overlay"] = save_overlay(
+                    image_path, heatmap, str(out_overlay), alpha=alpha
+                )
+                gradcam_payload["embedding_raw"] = save_raw_heatmap(
+                    heatmap, str(out_raw)
+                )
+            except Exception as exc:
+                gradcam_payload["embedding_error"] = str(exc)
+
+        if "classifier" in targets:
+            icfg = (config.get("image_classifier") or {})
+            ckpt = icfg.get("checkpoint_path", "artifacts/image_classifier_head.pt")
+            try:
+                classifier, _ = load_image_head(ckpt)
+                heatmap = image_encoder.gradcam(
+                    image_path, target="classifier", classifier=classifier
+                )
+                pid = patient_id or Path(image_path).stem
+                label_name = "unknown"
+                out_dir = Path(output_dir) / pid / label_name
+                out_overlay = out_dir / "classifier_overlay.png"
+                out_raw = out_dir / "classifier_raw.png"
+                gradcam_payload["classifier_overlay"] = save_overlay(
+                    image_path, heatmap, str(out_overlay), alpha=alpha
+                )
+                gradcam_payload["classifier_raw"] = save_raw_heatmap(
+                    heatmap, str(out_raw)
+                )
+            except Exception as exc:
+                gradcam_payload["classifier_error"] = str(exc)
+
     return {
-        # "audio_embedding": audio_embedding,
-        # "image_embedding": image_embedding,
-        # "fused_image_embedding": fused_image_embedding,
+        "audio_embedding": audio_embedding,
+        "image_embedding": image_embedding,
+        "fused_image_embedding": fused_image_embedding,
         "audio_classification": classification_payload,
+        "gradcam": gradcam_payload,
         "encoder_metadata": {
             "audio": audio_encoder.metadata.__dict__,
             "image": image_encoder.metadata.__dict__,
