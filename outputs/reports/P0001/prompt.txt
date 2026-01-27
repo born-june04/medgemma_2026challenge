@@ -1,5 +1,7 @@
 You are a clinical assistant. Write a concise medical report draft based ONLY on the provided evidence.
 Do NOT invent findings. If evidence is insufficient, say so.
+Do not repeat the instructions or the input JSON.
+Output ONLY the report (no critique, no scoring, no self-review).
 Use this structure:
 1) Impression (1-3 bullet points)
 2) Supporting evidence (bullets; cite which evidence)
@@ -42,7 +44,7 @@ Audio classification (model output):
 Physiology features (interpretable, hypothesis-level):
 {}
 
-CXR visual evidence (files saved for human review):
+CXR visual evidence (occlusion-based attribution files saved for human review):
 {
   "original": "outputs/gradcam/P0001/5. Tuberculosis/original.png",
   "pred": {

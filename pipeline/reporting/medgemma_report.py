@@ -44,6 +44,8 @@ def build_report_prompt(payload: Dict[str, Any]) -> str:
     return (
         "You are a clinical assistant. Write a concise medical report draft based ONLY on the provided evidence.\n"
         "Do NOT invent findings. If evidence is insufficient, say so.\n"
+        "Do not repeat the instructions or the input JSON.\n"
+        "Output ONLY the report (no critique, no scoring, no self-review).\n"
         "Use this structure:\n"
         "1) Impression (1-3 bullet points)\n"
         "2) Supporting evidence (bullets; cite which evidence)\n"
@@ -56,7 +58,7 @@ def build_report_prompt(payload: Dict[str, Any]) -> str:
         f"{json.dumps(_jsonable(audio_cls), ensure_ascii=False, indent=2)}\n\n"
         "Physiology features (interpretable, hypothesis-level):\n"
         f"{json.dumps(_jsonable(phys), ensure_ascii=False, indent=2)}\n\n"
-        "CXR visual evidence (files saved for human review):\n"
+        "CXR visual evidence (occlusion-based attribution files saved for human review):\n"
         f"{json.dumps(_jsonable(visual), ensure_ascii=False, indent=2)}\n"
     )
 
