@@ -8,8 +8,12 @@ hf_token: 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
 hf_home: "/gscratch/scrubbed/june0604/.cache/huggingface"
 
 physiology:
-  enabled: False
+  enabled: True
   output_dir: "outputs/evidence/physiology"
+
+cxr_physiology:
+  enabled: True
+  output_dir: "outputs/evidence/cxr_physiology"
 
 report:
   enabled: True

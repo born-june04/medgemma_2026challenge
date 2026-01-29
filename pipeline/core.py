@@ -14,8 +14,11 @@ from huggingface_hub import login
 from Agent1_Audio.encoders import get_audio_encoder
 from Agent1_Audio.classifiers.audio_head import load_head_from_ckpt
 from Agent1_Audio.physiology.features import extract_audio_features
+from Agent1_Audio.physiology.analyzer import HierarchicalPhysiologyAnalyzer
 from Agent2_Image.encoders import get_image_encoder
 from Agent2_Image.classifiers.image_head import load_head_from_ckpt as load_image_head
+from Agent2_Image.physiology.features import extract_cxr_features
+from Agent2_Image.physiology.analyzer import HierarchicalCXRAnalyzer
 from Agent2_Image.utils.gradcam_utils import save_original, save_overlay_with_colorbar
 from pipeline.reporting import generate_medgemma_report
 
@@ -153,13 +156,29 @@ def run_pipeline(
     pcfg = (config.get("physiology") or {})
     if pcfg.get("enabled", False):
         try:
-            physiology_payload = extract_audio_features(audio_path).__dict__
+            # Extract audio features
+            features = extract_audio_features(audio_path)
+            
+            # Perform hierarchical physiological analysis
+            analyzer = HierarchicalPhysiologyAnalyzer()
+            analysis_result = analyzer.analyze(features)
+            
+            # Save both raw features and hierarchical analysis
+            physiology_payload = analysis_result
+            
             out_dir = Path(str(pcfg.get("output_dir", "outputs/evidence/physiology"))) / (
                 patient_id or Path(audio_path).stem
             )
             out_dir.mkdir(parents=True, exist_ok=True)
-            (out_dir / "physiology.json").write_text(
+            
+            # Save complete analysis
+            (out_dir / "hierarchical_analysis.json").write_text(
                 json.dumps(physiology_payload, indent=2), encoding="utf-8"
+            )
+            
+            # Also save raw features for backward compatibility
+            (out_dir / "physiology.json").write_text(
+                json.dumps(features.__dict__, indent=2), encoding="utf-8"
             )
         except Exception as exc:
             physiology_payload = {"error": str(exc)}
@@ -241,6 +260,38 @@ def run_pipeline(
             except Exception as exc:
                 gradcam_payload["occlusion_error"] = str(exc)
 
+    # CXR Physiology Analysis
+    cxr_physiology_payload = None
+    cxr_pcfg = (config.get("cxr_physiology") or {})
+    if cxr_pcfg.get("enabled", False):
+        try:
+            # Extract CXR features
+            cxr_features = extract_cxr_features(image_path)
+            
+            # Perform hierarchical radiological analysis
+            cxr_analyzer = HierarchicalCXRAnalyzer()
+            cxr_analysis_result = cxr_analyzer.analyze(cxr_features)
+            
+            # Save both raw features and hierarchical analysis
+            cxr_physiology_payload = cxr_analysis_result
+            
+            out_dir = Path(str(cxr_pcfg.get("output_dir", "outputs/evidence/cxr_physiology"))) / (
+                patient_id or Path(image_path).stem
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Save complete analysis
+            (out_dir / "hierarchical_analysis.json").write_text(
+                json.dumps(cxr_physiology_payload, indent=2), encoding="utf-8"
+            )
+            
+            # Also save raw features
+            (out_dir / "cxr_features.json").write_text(
+                json.dumps(cxr_features.__dict__, indent=2), encoding="utf-8"
+            )
+        except Exception as exc:
+            cxr_physiology_payload = {"error": str(exc)}
+
     report_payload = None
     rcfg = (config.get("report") or {})
     if rcfg.get("enabled", False):
@@ -257,6 +308,7 @@ def run_pipeline(
                 "image_path": str(image_path),
                 "audio_classification": classification_payload,
                 "physiology": physiology_payload,
+                "cxr_physiology": cxr_physiology_payload,
                 "visual_evidence": gradcam_payload,
             }
 
@@ -329,6 +381,7 @@ def run_pipeline(
         "fused_image_embedding": fused_image_embedding,
         "audio_classification": classification_payload,
         "physiology": physiology_payload,
+        "cxr_physiology": cxr_physiology_payload,
         "gradcam": gradcam_payload,
         "report": report_payload,
         "encoder_metadata": {
