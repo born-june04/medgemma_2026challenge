@@ -3,7 +3,7 @@ audio_checkpoint: "google/hear-pytorch"
 # MedSigLIP model id (update if you want a different checkpoint)
 image_checkpoint: "google/medsiglip-448"
 llm_adapter: placeholder
-hf_token: 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
+hf_token: "put your token"
 # Put Hugging Face caches on scratch to avoid /mmfs1/home quota issues
 hf_home: "/gscratch/scrubbed/june0604/.cache/huggingface"
 
