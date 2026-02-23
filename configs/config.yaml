@@ -3,9 +3,9 @@ audio_checkpoint: "google/hear-pytorch"
 # MedSigLIP model id (update if you want a different checkpoint)
 image_checkpoint: "google/medsiglip-448"
 llm_adapter: placeholder
-hf_token: "put your token"
-# Put Hugging Face caches on scratch to avoid /mmfs1/home quota issues
-hf_home: "/gscratch/scrubbed/june0604/.cache/huggingface"
+hf_token: ""  # Set your HuggingFace token here, or via HF_TOKEN env var
+# Optional: set a custom HuggingFace cache directory
+# hf_home: "/path/to/hf_cache"
 
 physiology:
   enabled: True
@@ -20,8 +20,7 @@ report:
   # Set to a HF text model id (e.g., a MedGemma instruction-tuned checkpoint you have access to)
   model_id: "google/medgemma-1.5-4b-it"
   # Optional: run report generation in a separate Python environment to avoid transformers version conflicts.
-  # Example: "/gscratch/scrubbed/june0604/conda-envs/medgemma/bin/python"
-  python_exe: "/gscratch/scrubbed/june0604/conda-envs/medgemma/bin/python"
+  # python_exe: "/path/to/your/python"
   output_dir: "outputs/reports"
   max_new_tokens: 512
   temperature: 0.2

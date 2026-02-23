@@ -287,6 +287,6 @@ def _hash_file(path: str, max_bytes: int = 4_000_000) -> str:
 if __name__ == "__main__":
     encoder = HeARAudioEncoder()
     # Test with scalogram PNG file
-    png_path = "/gscratch/scrubbed/june0604/medgemma_2026challenge/data/Chest_Diseases_Dataset/1. COVID-19/CSI/Image 01 (14).png"
+    png_path = "data/Chest_Diseases_Dataset/1. COVID-19/CSI/Image 01 (14).png"
     embedding = encoder.encode(png_path)
     print(f"Embedding shape: {embedding.shape}")

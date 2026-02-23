@@ -57,6 +57,17 @@ env/
 # sample_data/*.jpg
 # sample_data/*.png
 
+# Large data files
+*.zip
+data/Chest_Diseases_Dataset/
+
+# External dependencies
+hear/
+
+# Keep docs/ sample outputs tracked
+!docs/
+!docs/**
+
 # Logs
 *.log
 logs/
@@ -69,3 +80,5 @@ Thumbs.db
 *.tmp
 *.temp
 
+# Pipeline outputs (contain runtime-specific paths)
+outputs/

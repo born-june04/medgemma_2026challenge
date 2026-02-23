@@ -1,12 +1,10 @@
 #!/bin/bash
-# Run pipeline with hierarchical physiology analysis (Audio + CXR) on GPU node
-# Usage: ssh g3099, then run this script
+# Run pipeline with hierarchical physiology analysis (Audio + CXR)
+# Usage: Activate your environment, then run this script from the project root.
 
-cd /gscratch/scrubbed/june0604/medgemma_2026challenge
-
-# Activate conda environment
-source ~/miniconda3/etc/profile.d/conda.sh
-conda activate kaggle
+# Activate conda environment (adjust to your setup)
+# source ~/miniconda3/etc/profile.d/conda.sh
+# conda activate your_env
 
 # Run pipeline with patient P0001
 python pipeline.py \
@@ -21,4 +19,3 @@ echo "  - Audio raw features: outputs/evidence/physiology/P0001/physiology.json"
 echo "  - CXR hierarchical analysis: outputs/evidence/cxr_physiology/P0001/hierarchical_analysis.json"
 echo "  - CXR raw features: outputs/evidence/cxr_physiology/P0001/cxr_features.json"
 echo "  - Report: outputs/reports/P0001/report.txt"
-

@@ -1,0 +1,91 @@
+{
+    "patient_id": "PNEUMOTHORAX_DEMO_003",
+    "disease_label": "6. Pneumothorax",
+    "pipeline_version": "1.0.0",
+    "audio_analysis": {
+        "hierarchical_analysis": {
+            "level_1": {
+                "category": "Cluster B: Structural/Pleural",
+                "confidence": 0.91,
+                "evidence": [
+                    "Markedly diminished breath sounds — overall energy significantly reduced",
+                    "Absence of adventitious sounds (no crackles, no wheezes)",
+                    "\"Silent chest\" pattern in affected region"
+                ]
+            },
+            "level_2": {
+                "pattern_type": "Silent chest — absent breath sounds",
+                "features": {
+                    "cough_type": "Minimal — suppressed due to pleuritic pain",
+                    "spectral_centroid": "890 Hz (very low — absence of normal respiratory sounds)",
+                    "hf_energy_ratio": "0.03 (near-complete absence of high-frequency content)"
+                }
+            },
+            "level_3": {
+                "primary_candidate": "6. Pneumothorax",
+                "primary_score": 0.86,
+                "evidence_for_primary": [
+                    "\"Silent chest\" pattern: HF energy ratio 0.03 (<0.05 threshold for pneumothorax)",
+                    "Near-absent breath sounds with very low spectral centroid (890 Hz)",
+                    "No adventitious sounds — consistent with air in pleural space"
+                ],
+                "alternative_candidate": "4. Atelectasis",
+                "alternative_score": 0.10,
+                "evidence_against_alternative": [
+                    "Complete silence rather than diminished-but-present sounds",
+                    "Absence of late inspiratory crackles typical of atelectasis re-expansion",
+                    "HF energy too low even for severe atelectasis"
+                ]
+            },
+            "physiological_conclusion": "Audio analysis reveals a 'silent chest' pattern with near-complete absence of breath sounds (HF energy: 0.03). This is highly characteristic of pneumothorax, where air in the pleural space prevents sound transmission. The complete absence distinguishes this from atelectasis, which typically shows diminished but present sounds with late inspiratory crackles."
+        }
+    },
+    "cxr_analysis": {
+        "hierarchical_analysis": {
+            "level_1": {
+                "category": "Cluster B: Structural Changes",
+                "confidence": 0.95,
+                "evidence": [
+                    "Hyperlucency in affected hemithorax (opacity: 0.18, well below normal)",
+                    "Asymmetric pattern with unilateral involvement",
+                    "Visible pleural line on affected side"
+                ]
+            },
+            "level_2": {
+                "pattern_type": "Unilateral Hyperlucency with Structural Disruption",
+                "features": {
+                    "distribution": "Unilateral (symmetry: 0.42 — severe asymmetry)",
+                    "texture": "Hyperlucent zone with opacity 0.18 (<0.30 threshold for pneumothorax)",
+                    "laterality": "Left-sided predominance"
+                }
+            },
+            "level_3": {
+                "primary_candidate": "6. Pneumothorax",
+                "primary_score": 0.90,
+                "evidence_for_primary": [
+                    "Severe hyperlucency (opacity: 0.18 — well below 0.30 threshold)",
+                    "Marked unilateral involvement (symmetry: 0.42)",
+                    "Absence of lung markings in hyperlucent zone"
+                ],
+                "alternative_candidate": "4. Atelectasis",
+                "alternative_score": 0.06,
+                "evidence_against_alternative": [
+                    "Hyperlucency (decreased opacity) rules out atelectasis (which shows increased opacity)",
+                    "No volume loss or mediastinal shift toward affected side"
+                ]
+            },
+            "radiological_conclusion": "CXR demonstrates unilateral hyperlucency (opacity: 0.18) with severe asymmetry (symmetry: 0.42) — classic for pneumothorax. The absence of lung markings in the affected zone and hyperlucent appearance strongly differentiate this from conditions with increased opacity."
+        }
+    },
+    "cross_modal_agreement": {
+        "audio_primary": "6. Pneumothorax",
+        "cxr_primary": "6. Pneumothorax",
+        "agreement": true,
+        "combined_confidence": 0.93,
+        "summary": "Strong cross-modal agreement for pneumothorax. Audio 'silent chest' (HF energy: 0.03) correlates directly with CXR hyperlucency (opacity: 0.18) — both indicating air in the pleural space preventing normal sound transmission and lung expansion."
+    },
+    "medgemma_report": {
+        "model_id": "google/medgemma-1.5-4b-it",
+        "report": "## Clinical Report Draft — Patient PNEUMOTHORAX_DEMO_003\n\n### Impression\n- **Primary finding:** High probability of pneumothorax with strong cross-modal agreement (93%).\n- Audio reveals classic 'silent chest' with near-absent breath sounds (HF energy: 0.03).\n- CXR shows unilateral hyperlucency with absence of lung markings.\n\n### Supporting Evidence\n- **Audio (HeAR):** Silent chest pattern (HF energy ratio 0.03, threshold <0.05). No adventitious sounds.\n- **CXR (MedSigLIP):** Hyperlucent zone (opacity: 0.18, threshold <0.30) with severe asymmetry (0.42).\n- **Physiological correlation:** Audio silence directly maps to CXR hyperlucency — air in pleural space blocks both sound transmission and normal lung aeration.\n\n### Caveats & Recommended Next Steps\n- **URGENT:** If tension pneumothorax is suspected, immediate needle decompression is indicated.\n- CT chest for precise quantification of pneumothorax size.\n- Assessment for underlying etiology (trauma, bullous disease, iatrogenic).\n- Serial CXR to monitor for progression or resolution."
+    }
+}

@@ -1,0 +1,132 @@
+{
+  "patient_id": "COVID_DEMO_001",
+  "disease_label": "1. COVID-19",
+  "pipeline_version": "1.0.0",
+  "audio_analysis": {
+    "hierarchical_analysis": {
+      "level_1": {
+        "category": "Cluster A: Infectious/Inflammatory",
+        "confidence": 0.94,
+        "evidence": [
+          "High cough rate detected: 8.2 coughs/min (threshold >5/min)",
+          "Elevated spectral energy in higher harmonics",
+          "Short, explosive cough bursts with rapid onset"
+        ]
+      },
+      "level_2": {
+        "pattern_type": "Dry cough signature (viral-like)",
+        "features": {
+          "cough_type": "Dry — minimal low-frequency mucus resonance",
+          "spectral_centroid": "2340 Hz (high-harmonic pattern, consistent with viral etiology)",
+          "temporal_pattern": "Paroxysmal bursts with 1.2s mean inter-cough interval"
+        }
+      },
+      "level_3": {
+        "primary_candidate": "1. COVID-19",
+        "primary_score": 0.89,
+        "evidence_for_primary": [
+          "High-harmonic dry cough: spectral centroid 2340 Hz (>2000 Hz threshold for COVID-19)",
+          "Energy concentrated in higher frequencies (HF energy ratio: 0.38, threshold >0.25)",
+          "Short explosive bursts without productive phase"
+        ],
+        "alternative_candidate": "8. Pneumonia",
+        "alternative_score": 0.07,
+        "evidence_against_alternative": [
+          "No low-frequency mucus resonance (<1000 Hz) characteristic of bacterial pneumonia",
+          "Spectral centroid too high for productive cough (2340 Hz vs expected <1500 Hz)",
+          "Absence of coarse crackle signatures"
+        ]
+      },
+      "physiological_conclusion": "Audio analysis strongly suggests an infectious/inflammatory process with dry cough characteristics consistent with COVID-19. The high spectral centroid (2340 Hz) and absence of productive cough features differentiate this from bacterial pneumonia. The paroxysmal temporal pattern aligns with viral respiratory infection."
+    },
+    "raw_features": {
+      "spectral_centroid_hz": 2340,
+      "spectral_bandwidth_hz": 1850,
+      "hf_energy_ratio": 0.38,
+      "temporal_burstiness": 0.52,
+      "cough_rate_per_min": 8.2,
+      "zero_crossing_rate": 0.12,
+      "mean_intensity_db": -22.5
+    }
+  },
+  "cxr_analysis": {
+    "hierarchical_analysis": {
+      "level_1": {
+        "category": "Cluster A: Increased Opacity",
+        "confidence": 0.97,
+        "evidence": [
+          "Mean opacity score: 0.58 (above normal threshold of 0.40)",
+          "Bilateral involvement detected (symmetry ratio: 0.91)",
+          "Multiple zones affected with diffuse pattern"
+        ]
+      },
+      "level_2": {
+        "pattern_type": "Peripheral Distribution with Ground Glass Opacity (GGO)",
+        "features": {
+          "distribution": "Peripheral predominance (peripheral/central ratio: 1.52, threshold >1.3 for COVID-19)",
+          "texture": "High entropy (0.72) suggesting hazy, ground-glass pattern rather than dense consolidation",
+          "laterality": "Bilateral (symmetry: 0.91)"
+        }
+      },
+      "level_3": {
+        "primary_candidate": "1. COVID-19",
+        "primary_score": 0.91,
+        "evidence_for_primary": [
+          "Peripheral zone predominance (ratio: 1.52 >1.3 threshold)",
+          "Ground glass opacity pattern (texture entropy: 0.72 >0.65 threshold)",
+          "Bilateral involvement with high symmetry (0.91)",
+          "Lower/mid zone predominance consistent with COVID-19 distribution"
+        ],
+        "alternative_candidate": "8. Pneumonia",
+        "alternative_score": 0.05,
+        "evidence_against_alternative": [
+          "High symmetry (0.91) argues against focal lobar pneumonia",
+          "GGO pattern instead of dense consolidation (homogeneity: 0.31 <0.45 threshold)",
+          "Peripheral rather than central distribution"
+        ]
+      },
+      "radiological_conclusion": "CXR analysis reveals bilateral peripheral ground glass opacities with high symmetry — a pattern highly characteristic of COVID-19 pneumonitis. The peripheral predominance (ratio: 1.52) and GGO texture (entropy: 0.72) strongly differentiate this from lobar bacterial pneumonia, which typically presents with focal dense consolidation."
+    },
+    "raw_features": {
+      "mean_opacity": 0.58,
+      "peripheral_central_ratio": 1.52,
+      "texture_entropy": 0.72,
+      "texture_homogeneity": 0.31,
+      "symmetry_ratio": 0.91,
+      "upper_zone_ratio": 0.22,
+      "mid_zone_ratio": 0.41,
+      "lower_zone_ratio": 0.37
+    }
+  },
+  "audio_classification": {
+    "pred_label": "1. COVID-19",
+    "pred_index": 0,
+    "confidence": 0.87,
+    "top_3": [
+      {"label": "1. COVID-19", "prob": 0.87},
+      {"label": "8. Pneumonia", "prob": 0.06},
+      {"label": "3. Consolidation Lung", "prob": 0.03}
+    ]
+  },
+  "cxr_classification": {
+    "pred_label": "1. COVID-19",
+    "pred_index": 0,
+    "confidence": 0.83,
+    "top_3": [
+      {"label": "1. COVID-19", "prob": 0.83},
+      {"label": "7. Edema", "prob": 0.07},
+      {"label": "8. Pneumonia", "prob": 0.05}
+    ]
+  },
+  "cross_modal_agreement": {
+    "audio_primary": "1. COVID-19",
+    "cxr_primary": "1. COVID-19",
+    "agreement": true,
+    "combined_confidence": 0.92,
+    "summary": "Both audio and CXR modalities converge on COVID-19 with high confidence. Audio detects characteristic high-harmonic dry cough, while CXR shows bilateral peripheral GGO — together providing strong multimodal evidence."
+  },
+  "medgemma_report": {
+    "model_id": "google/medgemma-1.5-4b-it",
+    "report": "## Clinical Report Draft — Patient COVID_DEMO_001\n\n### Impression\n- **Primary finding:** High probability of COVID-19 pneumonitis based on converging multimodal evidence.\n- Audio analysis reveals a characteristic dry cough with high-harmonic spectral signature (centroid: 2340 Hz).\n- CXR demonstrates bilateral peripheral ground glass opacities (GGO) — a hallmark radiological finding for SARS-CoV-2 infection.\n\n### Supporting Evidence\n- **Audio (HeAR encoder):** Classified as COVID-19 (confidence: 87%). Hierarchical analysis confirms dry cough signature with spectral centroid >2000 Hz and no low-frequency mucus resonance.\n- **CXR (MedSigLIP encoder):** Classified as COVID-19 (confidence: 83%). Peripheral-to-central opacity ratio of 1.52 with GGO texture pattern (entropy: 0.72). Bilateral symmetric involvement (symmetry: 0.91).\n- **Cross-modal agreement:** Both modalities independently converge on COVID-19, yielding a combined confidence of 92%.\n\n### Caveats & Recommended Next Steps\n- This is a hypothesis-level assessment, not a clinical diagnosis.\n- RT-PCR testing is the gold standard for COVID-19 confirmation.\n- Serial CXR or CT imaging may be warranted to assess disease progression.\n- Clinical correlation with symptoms (fever, dyspnea, anosmia) and exposure history is essential.\n- Consider differential diagnoses including other viral pneumonias and organizing pneumonia."
+  }
+}

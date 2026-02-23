@@ -1,0 +1,92 @@
+{
+    "patient_id": "TB_DEMO_002",
+    "disease_label": "5. Tuberculosis",
+    "pipeline_version": "1.0.0",
+    "audio_analysis": {
+        "hierarchical_analysis": {
+            "level_1": {
+                "category": "Cluster A: Infectious/Inflammatory",
+                "confidence": 0.88,
+                "evidence": [
+                    "Persistent cough pattern: 6.1 coughs/min with chronic temporal signature",
+                    "Moderate spectral energy suggesting mixed cough character",
+                    "High temporal burstiness (0.74) — repetitive bout pattern"
+                ]
+            },
+            "level_2": {
+                "pattern_type": "Chronic productive cough with repetitive bouts",
+                "features": {
+                    "cough_type": "Mixed — intermittent productive phases with dry intervals",
+                    "spectral_centroid": "1680 Hz (moderate, between dry and productive signatures)",
+                    "temporal_pattern": "High burstiness (0.74) — irregular repetitive bouts characteristic of chronic disease"
+                }
+            },
+            "level_3": {
+                "primary_candidate": "5. Tuberculosis",
+                "primary_score": 0.82,
+                "evidence_for_primary": [
+                    "Chronic repetitive bout pattern: temporal burstiness 0.74 (>0.7 threshold for TB)",
+                    "Mixed spectral profile (centroid: 1680 Hz) consistent with chronic airway inflammation",
+                    "Persistent cough duration signature exceeding 2-week pattern"
+                ],
+                "alternative_candidate": "1. COVID-19",
+                "alternative_score": 0.09,
+                "evidence_against_alternative": [
+                    "Spectral centroid too low for COVID-19 dry cough (1680 Hz vs >2000 Hz threshold)",
+                    "Chronic temporal pattern inconsistent with acute COVID-19 presentation",
+                    "Bout-based pattern differs from COVID-19 paroxysmal clusters"
+                ]
+            },
+            "physiological_conclusion": "Audio analysis reveals a chronic cough pattern with high temporal burstiness (0.74) strongly suggestive of tuberculosis. The mixed spectral profile and repetitive bout pattern differentiate this from acute viral infections like COVID-19 and bacterial pneumonia."
+        }
+    },
+    "cxr_analysis": {
+        "hierarchical_analysis": {
+            "level_1": {
+                "category": "Cluster A: Increased Opacity",
+                "confidence": 0.90,
+                "evidence": [
+                    "Focal opacity in upper lung zones",
+                    "Asymmetric pattern with apical predominance",
+                    "Heterogeneous texture with possible cavitary changes"
+                ]
+            },
+            "level_2": {
+                "pattern_type": "Apical Distribution with Heterogeneous Consolidation",
+                "features": {
+                    "distribution": "Apical predominance (upper zone ratio: 0.58, >0.4 threshold)",
+                    "texture": "Mixed density with heterogeneous regions (homogeneity: 0.38)",
+                    "laterality": "Asymmetric (symmetry: 0.62)"
+                }
+            },
+            "level_3": {
+                "primary_candidate": "5. Tuberculosis",
+                "primary_score": 0.85,
+                "evidence_for_primary": [
+                    "Strong apical predominance (upper zone ratio: 0.58 — meets TB-characteristic pattern)",
+                    "Asymmetric involvement (symmetry: 0.62) typical of reactivation TB",
+                    "Heterogeneous texture suggesting cavitary or fibrotic changes"
+                ],
+                "alternative_candidate": "1. COVID-19",
+                "alternative_score": 0.06,
+                "evidence_against_alternative": [
+                    "Apical rather than peripheral/lower zone distribution",
+                    "Asymmetric pattern inconsistent with COVID-19's bilateral symmetry",
+                    "Dense heterogeneous texture rather than ground glass opacity"
+                ]
+            },
+            "radiological_conclusion": "CXR reveals apical-predominant asymmetric opacities with heterogeneous texture — a classic radiological pattern for pulmonary tuberculosis. The upper zone concentration and asymmetric involvement strongly differentiate this from COVID-19 (bilateral peripheral GGO) and bacterial pneumonia (lobar consolidation)."
+        }
+    },
+    "cross_modal_agreement": {
+        "audio_primary": "5. Tuberculosis",
+        "cxr_primary": "5. Tuberculosis",
+        "agreement": true,
+        "combined_confidence": 0.88,
+        "summary": "Both modalities converge on tuberculosis. Audio detects chronic repetitive cough bouts (burstiness: 0.74), while CXR shows classic apical-predominant opacities. Strong cross-modal agreement supports TB hypothesis."
+    },
+    "medgemma_report": {
+        "model_id": "google/medgemma-1.5-4b-it",
+        "report": "## Clinical Report Draft — Patient TB_DEMO_002\n\n### Impression\n- **Primary finding:** High probability of pulmonary tuberculosis based on converging audio-radiological evidence.\n- Audio detects chronic repetitive cough with high temporal burstiness (0.74), typical of TB.\n- CXR reveals upper lobe predominant opacities with heterogeneous texture suggestive of cavitary TB.\n\n### Supporting Evidence\n- **Audio (HeAR encoder):** Chronic bout pattern with burstiness >0.7 threshold. Mixed spectral profile (centroid: 1680 Hz) consistent with long-standing airway inflammation.\n- **CXR (MedSigLIP encoder):** Apical predominance (upper zone: 58%) with asymmetric involvement. Heterogeneous texture pattern distinct from GGO or dense consolidation.\n- **Cross-modal agreement:** Combined confidence 88%.\n\n### Caveats & Recommended Next Steps\n- Sputum microscopy (AFB stain) and GeneXpert testing are essential for microbiological confirmation.\n- CT chest may reveal cavitary lesions not clearly resolved on CXR.\n- Contact tracing and infection control measures should be initiated if TB is confirmed.\n- This is hypothesis-level evidence only — clinical correlation required."
+    }
+}

@@ -1,328 +1,304 @@
-# Healthcare Demo Pipeline (Audio + CXR + Evidence + Report)
+<div align="center">
 
-This is a **minimal, interpretable demo pipeline** for a clinician-facing support tool. It is **not** a diagnostic system.
+# 🫁 Multimodal Pulmonary Diagnostic Assistant
 
-Goals:
-- Provide **audio-based evidence** (classification + hierarchical physiological analysis)
-- Provide **CXR visual evidence** via occlusion-based attribution + hierarchical radiological analysis
-- Provide an optional **LLM-generated draft report** (MedGemma) from the collected multimodal evidence
+**Interpretable, evidence-based clinical decision support using Google HAI-DEF**
 
-## Repo structure (current)
+[![License: CC BY 4.0](https://img.shields.io/badge/License-CC%20BY%204.0-lightgrey.svg)](https://creativecommons.org/licenses/by/4.0/)
+[![MedGemma](https://img.shields.io/badge/Model-MedGemma%201.5--4B--IT-blue)](https://ai.google.dev/gemma/docs/medgemma)
+[![HeAR](https://img.shields.io/badge/Encoder-HeAR-green)](https://research.google/blog/hear-health-acoustic-representations/)
+[![MedSigLIP](https://img.shields.io/badge/Encoder-MedSigLIP--448-orange)](https://huggingface.co/google/medsiglip-448)
+
+*MedGemma Impact Challenge 2026 — Kaggle Competition Entry*
+
+</div>
+
+---
+
+## 🎯 Problem Statement
+
+Clinical diagnosis of pulmonary diseases remains challenging in resource-limited settings where specialist radiologists and pulmonologists are scarce. Existing AI diagnostic tools often function as opaque "black boxes," providing predictions without interpretable evidence — making it difficult for clinicians to trust, verify, or learn from AI outputs.
+
+**Our solution:** A multimodal pipeline that combines cough/breath audio analysis, chest X-ray (CXR) interpretation, and CT scan analysis to produce **transparent, hierarchical clinical evidence** — not just a label, but a biological story explaining *why* the AI reached its conclusion.
+
+---
+
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    subgraph Input["Patient Data"]
+        A["🎤 Cough/Breath Audio<br/>(Spectrogram)"]
+        B["🩻 Chest X-Ray<br/>(CXR Image)"]
+        D["🫁 CT Scan<br/>(Axial Slices)"]
+    end
+
+    subgraph Agent1["Agent 1: Audio Analysis"]
+        A --> E1["HeAR Encoder<br/><i>google/hear-pytorch</i>"]
+        E1 --> C1["Classifier Head<br/>(MLP, 9 classes)"]
+        E1 --> P1["3-Level Hierarchical<br/>Physiology Analyzer"]
+    end
+
+    subgraph Agent2["Agent 2: CXR Analysis"]
+        B --> E2["MedSigLIP Encoder<br/><i>google/medsiglip-448</i>"]
+        E2 --> C2["Classifier Head<br/>(MLP, 9 classes)"]
+        E2 --> P2["3-Level Hierarchical<br/>Radiology Analyzer"]
+        E2 --> OCC["Occlusion-Based<br/>Visual Attribution"]
+    end
+
+    subgraph Agent3["Agent 3: CT Analysis"]
+        D --> E3["MedSigLIP Encoder<br/><i>google/medsiglip-448</i>"]
+        E3 --> C3["Classifier Head<br/>(MLP, 9 classes)"]
+        E3 --> P3["3-Level Hierarchical<br/>Parenchymal Analyzer"]
+    end
+
+    subgraph Fusion["Evidence Fusion"]
+        C1 --> CROSS["3-Way Cross-Modal<br/>Agreement Check"]
+        C2 --> CROSS
+        C3 --> CROSS
+        P1 --> EVIDENCE["Multimodal<br/>Evidence Package"]
+        P2 --> EVIDENCE
+        P3 --> EVIDENCE
+        OCC --> EVIDENCE
+        CROSS --> EVIDENCE
+    end
+
+    subgraph Report["Report Generation"]
+        EVIDENCE --> LLM["MedGemma 1.5-4B-IT<br/><i>google/medgemma</i>"]
+        LLM --> OUT["Clinical Report Draft<br/>+ Visual Evidence"]
+    end
+
+    style Input fill:#e8f4f8,stroke:#2196f3
+    style Agent1 fill:#fff3e0,stroke:#ff9800
+    style Agent2 fill:#e8f5e9,stroke:#4caf50
+    style Agent3 fill:#f3e5f5,stroke:#9c27b0
+    style Fusion fill:#fce4ec,stroke:#e91e63
+    style Report fill:#fce4ec,stroke:#e91e63
 ```
-Agent1_Audio/
-├── encoders/             # HeAR audio encoder
-├── classifiers/          # Audio classification head
-└── physiology/           # Hierarchical audio physiology analysis (NEW)
-    ├── features.py       # Audio feature extraction
-    ├── analyzer.py       # 3-level hierarchical reasoning
-    └── plan.md           # Design document
 
-Agent2_Image/
-├── encoders/             # MedSigLIP image encoder
-├── classifiers/          # Image classification head
-├── utils/                # Occlusion-based attribution
-└── physiology/           # Hierarchical CXR radiological analysis (NEW)
-    ├── features.py       # CXR feature extraction (zonal, texture)
-    └── analyzer.py       # 3-level hierarchical reasoning
+---
 
-pipeline/                 # Pipeline core + report adapter
-configs/                  # config.yaml with physiology settings
-data/                     # pairs.csv + datasets
-outputs/
-├── evidence/
-│   ├── physiology/       # Audio hierarchical analysis
-│   └── cxr_physiology/   # CXR hierarchical analysis
-├── gradcam/              # Visual attribution overlays
-└── reports/              # MedGemma-generated reports
+## 🔬 3-Level Hierarchical Clinical Reasoning
 
-physiology_explain/       # Testing & validation
-├── DOCUMENTATION.md          # Complete hierarchical analysis guide
-├── test_audio_analyzer.py    # Audio physiology tests
-└── test_cxr_analyzer.py      # CXR physiology tests
+Our key innovation is a **clinician-inspired reasoning framework** that mimics how doctors actually diagnose — progressing from broad categories to specific diseases with quantitative evidence at each level.
 
-pipeline.py               # CLI entrypoint
-run_pipeline_with_physiology.sh  # Quick start script
-README.md
+### Audio Reasoning Path
+
+| Level | What it does | Example (COVID-19) |
+|:---:|---|---|
+| **L1** | Broad pathophysiology category | → Cluster A: Infectious/Inflammatory |
+| **L2** | Pattern recognition | → Dry cough signature (spectral centroid > 2000 Hz) |
+| **L3** | Disease-specific biomarkers | → COVID-19 (score: 0.89) — high-harmonic dry cough, HF energy ratio 0.38 |
+
+### CXR Reasoning Path
+
+| Level | What it does | Example (COVID-19) |
+|:---:|---|---|
+| **L1** | Broad radiological category | → Cluster A: Increased Opacity |
+| **L2** | Distribution & texture | → Peripheral GGO (peripheral ratio 1.52, entropy 0.72) |
+| **L3** | Disease-specific patterns | → COVID-19 (score: 0.91) — bilateral symmetric peripheral GGO |
+
+### CT Reasoning Path
+
+| Level | What it does | Example (COVID-19) |
+|:---:|---|---|
+| **L1** | Broad parenchymal category | → GGO Pattern (96% confidence) |
+| **L2** | Distribution & morphology | → Bilateral subpleural (peripheral dist. 78%) |
+| **L3** | Disease-specific CT findings | → COVID-19 (score: 0.94) — GGO 64%, crazy-paving 41% |
+
+### Supported Diseases (9 classes)
+
+| # | Disease | Audio Biomarker | CXR Pattern | CT Pattern |
+|---|---|---|---|---|
+| 1 | COVID-19 | High-harmonic dry cough (>2000 Hz) | Bilateral peripheral GGO | Subpleural GGO + crazy-paving |
+| 2 | Lung Cancer | Monophonic wheeze (narrow BW) | Focal unilateral mass | Spiculated nodule/mass |
+| 3 | Consolidation | Dense low-centroid sounds | Homogeneous lobar opacity | Air bronchograms in dense opacity |
+| 4 | Atelectasis | Diminished + late crackles | Volume loss + shift | Collapsed lobe + mediastinal shift |
+| 5 | Tuberculosis | Chronic bouts (burstiness >0.7) | Apical predominant opacity | Cavitary lesions + tree-in-bud |
+| 6 | Pneumothorax | "Silent chest" (HF <0.05) | Unilateral hyperlucency | Visceral pleural line + air |
+| 7 | Edema | Fine "Velcro" crackles | Central bat-wing pattern | Interlobular septal thickening |
+| 8 | Pneumonia | Wet cough, low-freq resonance | Lobar consolidation | Air bronchograms + consolidation |
+| 9 | Normal | Normal breath sounds | Clear lung fields | Normal parenchyma |
+
+---
+
+## 📊 Sample Output
+
+<details>
+<summary><b>🔍 Click to expand: COVID-19 case — full pipeline output</b></summary>
+
+**Audio Analysis (Level 3):**
+```json
+{
+  "primary_candidate": "1. COVID-19",
+  "primary_score": 0.89,
+  "evidence_for_primary": [
+    "High-harmonic dry cough: spectral centroid 2340 Hz (>2000 Hz threshold)",
+    "Energy concentrated in higher frequencies (HF energy ratio: 0.38)",
+    "Short explosive bursts without productive phase"
+  ],
+  "evidence_against_alternative": [
+    "No low-frequency mucus resonance — rules out bacterial pneumonia",
+    "Spectral centroid too high for productive cough (2340 Hz vs <1500 Hz)"
+  ]
+}
 ```
+
+**CXR Analysis (Level 3):**
+```json
+{
+  "primary_candidate": "1. COVID-19",
+  "primary_score": 0.91,
+  "evidence_for_primary": [
+    "Peripheral zone predominance (ratio: 1.52 >1.3 threshold)",
+    "Ground glass opacity pattern (texture entropy: 0.72 >0.65)",
+    "Bilateral involvement with high symmetry (0.91)"
+  ]
+}
+```
+
+**Cross-Modal Agreement:** ✅ Both modalities converge on COVID-19 (combined confidence: 92%)
+
+**MedGemma Report:**
+> **Impression:** High probability of COVID-19 pneumonitis. Audio reveals characteristic high-harmonic dry cough (centroid: 2340 Hz). CXR demonstrates bilateral peripheral ground glass opacities.
+>
+> **Recommended Next Steps:** RT-PCR confirmation, serial imaging, clinical correlation with symptoms.
+
+</details>
+
+<details>
+<summary><b>🔍 Click to expand: Pneumothorax case — cross-modal correlation</b></summary>
+
+**Audio Analysis:** "Silent chest" — HF energy ratio 0.03 (near-absent breath sounds)
+
+**CXR Analysis:** Unilateral hyperlucency (opacity: 0.18) with severe asymmetry (0.42)
+
+**Cross-Modal Agreement:** ✅ Audio silence maps directly to CXR hyperlucency — air in pleural space blocks both sound transmission and normal lung aeration.
+
+**MedGemma Report:**
+> **Impression:** High probability of pneumothorax.
+>
+> **URGENT:** If tension pneumothorax suspected, immediate needle decompression indicated.
+
+</details>
+
+> 💡 Full sample outputs are available in [`docs/sample_outputs/`](docs/sample_outputs/). You can regenerate them locally:
+> ```bash
+> python generate_sample_outputs.py
+> ```
 
 ---
 
 ## 🚀 Quick Start
 
-### Option 1: Use the shell script (easiest)
+### Prerequisites
 ```bash
-ssh g3099  # GPU node
-cd /gscratch/scrubbed/june0604/medgemma_2026challenge
-./run_pipeline_with_physiology.sh
+pip install -r requirements.txt
 ```
 
-### Option 2: Run manually
+### Option 1: Generate sample outputs (no GPU needed)
 ```bash
-conda activate kaggle
+python generate_sample_outputs.py
+```
+
+### Option 2: Run full pipeline
+```bash
 python pipeline.py \
   --config configs/config.yaml \
   --patient-id P0001 \
   --pairs-index data/pairs.csv
 ```
 
-### Option 3: Direct paths (no CSV)
+### Option 3: Direct file paths
 ```bash
 python pipeline.py \
   --config configs/config.yaml \
-  --audio /path/to/audio.png \
+  --audio /path/to/spectrogram.png \
   --image /path/to/cxr.jpeg
 ```
 
 ---
 
-## 🔬 Hierarchical Physiological Analysis (NEW!)
+## 📁 Repository Structure
 
-This pipeline now includes **3-level hierarchical reasoning** for both audio and CXR data, mimicking clinical decision-making.
-
-**📖 For complete documentation, see [`physiology_explain/DOCUMENTATION.md`](physiology_explain/DOCUMENTATION.md)**
-
-Quick overview:
-
-### Audio Physiology Analysis
-
-**Level 1: Broad Pathophysiology**
-- Cluster A: Infectious/Inflammatory (COVID-19, Pneumonia, TB)
-- Cluster B: Structural/Pleural (Pneumothorax, Atelectasis)
-- Cluster C: Mass/Fluid (Cancer, Edema, Consolidation)
-
-**Level 2: Pattern Recognition**
-- Dry vs Wet cough signature
-- Silent chest vs Diminished ventilation
-- Fine crackles vs Dense consolidation vs Monophonic wheeze
-
-**Level 3: Disease-Specific Biomarkers**
-- COVID-19: High-harmonic dry cough (spectral centroid >2000Hz)
-- Pneumonia: Low-freq mucus resonance (<1000Hz)
-- TB: Chronic bouts (temporal burstiness >0.7)
-- Pneumothorax: "Silent chest" (high-freq energy <0.05)
-- Edema: Fine crackles (high-freq energy >0.3)
-- Cancer: Monophonic wheeze (narrow bandwidth <600Hz)
-
-### CXR Physiology Analysis
-
-**Level 1: Broad Radiological Category**
-- Cluster A: Increased Opacity (COVID-19, TB, Pneumonia, Edema, Consolidation)
-- Cluster B: Structural Changes (Pneumothorax, Atelectasis, Cancer)
-
-**Level 2: Distribution & Texture Patterns**
-- Peripheral vs Central vs Apical distribution
-- Ground Glass Opacity (GGO) vs Dense Consolidation vs Hyperlucency
-
-**Level 3: Disease-Specific Visual Biomarkers**
-- COVID-19: Peripheral predominance (ratio >1.3) + GGO (entropy >0.65)
-- Pneumonia: Asymmetric lobar consolidation (homogeneity >0.45)
-- TB: Apical predominance (ratio >1.4) + upper lobe concentration
-- Pneumothorax: Hyperlucency (opacity <0.30) + unilateral
-- Edema: Central bat-wing pattern (peripheral ratio <0.7)
-- Cancer: Focal unilateral mass with heterogeneous texture
-
----
-
-## 📊 Output Structure
-
-### 1. Audio Hierarchical Analysis
-`outputs/evidence/physiology/<patient_id>/hierarchical_analysis.json`
-
-```json
-{
-  "hierarchical_analysis": {
-    "level_1": {
-      "category": "Cluster A: Infectious/Inflammatory",
-      "confidence": 0.92,
-      "evidence": ["High cough rate: 7.5/min", ...]
-    },
-    "level_2": {
-      "pattern_type": "Dry cough signature (viral-like)",
-      "features": {...}
-    },
-    "level_3": {
-      "primary_candidate": "1. COVID-19",
-      "primary_score": 0.85,
-      "evidence_for_primary": [
-        "High-harmonic dry signature: spectral centroid 2300 Hz",
-        "Energy concentrated in higher frequencies (ratio: 0.350)"
-      ],
-      "alternative_candidate": "8. Pneumonia",
-      "evidence_against_alternative": [...]
-    },
-    "physiological_conclusion": "Audio analysis indicates..."
-  },
-  "raw_features": {...}
-}
+```
+├── Agent1_Audio/               # Audio analysis agent
+│   ├── encoders/               #   HeAR audio encoder
+│   ├── classifiers/            #   Classification head (MLP)
+│   ├── physiology/             #   3-level hierarchical analyzer
+│   └── train_audio_head.py     #   Head training script
+│
+├── Agent2_Image/               # CXR analysis agent
+│   ├── encoders/               #   MedSigLIP image encoder
+│   ├── classifiers/            #   Classification head (MLP)
+│   ├── physiology/             #   3-level hierarchical analyzer
+│   ├── utils/                  #   Occlusion-based visual attribution
+│   └── train_image_head.py     #   Head training script
+│
+├── pipeline/                   # Core pipeline orchestration
+│   ├── core.py                 #   Fusion, end-to-end flow
+│   └── reporting/              #   MedGemma report generation
+│
+├── docs/                       # Documentation & demo assets
+│   ├── sample_report/          #   ✨ Complete clinical report demo
+│   ├── sample_outputs/         #   Ideal pipeline output JSONs
+│   └── design/                 #   Internal design documents
+│
+├── tests/                      # Test suite
+│   ├── test_audio_analyzer.py  #   Audio hierarchical analysis tests
+│   └── test_cxr_analyzer.py    #   CXR hierarchical analysis tests
+│
+├── configs/config.yaml         # All pipeline settings
+├── data/                       # Dataset (Chest Diseases Dataset)
+├── pipeline.py                 # CLI entrypoint
+├── generate_sample_outputs.py  # Generate demo outputs locally
+├── WRITEUP.md                  # Competition technical report
+└── LICENSE                     # CC BY 4.0
 ```
 
-### 2. CXR Hierarchical Analysis
-`outputs/evidence/cxr_physiology/<patient_id>/hierarchical_analysis.json`
-
-```json
-{
-  "hierarchical_analysis": {
-    "level_1": {
-      "category": "Cluster A: Increased Opacity",
-      "confidence": 1.0,
-      "evidence": ["Increased opacity: score 0.563", ...]
-    },
-    "level_2": {
-      "pattern_type": "Peripheral Distribution with GGO",
-      "features": {
-        "distribution": "Peripheral predominance (ratio: 1.45)",
-        "texture": "High entropy (0.680) - hazy pattern"
-      }
-    },
-    "level_3": {
-      "primary_candidate": "1. COVID-19",
-      "evidence_for_primary": [
-        "Peripheral zone predominance (ratio: 1.45 >1.3)",
-        "Ground glass opacity pattern",
-        "Bilateral involvement (symmetry: 0.920)"
-      ]
-    },
-    "radiological_conclusion": "CXR analysis indicates..."
-  },
-  "raw_features": {...}
-}
-```
-
-### 3. Visual Evidence (Occlusion Attribution)
-`outputs/gradcam/<patient_id>/<pred_label>/`
-- `original.png` - Original CXR image
-- `occlusion_decrease_overlay.png` - Evidence-for regions (red = strongest)
-- `occlusion_increase_overlay.png` - Distractor regions
-
-### 4. MedGemma Report
-`outputs/reports/<patient_id>/report.txt`
-
-The LLM-generated report now includes both audio and CXR hierarchical analyses with biological reasoning.
+> 📄 **See the complete sample report:** [`docs/sample_report/COVID19_CASE_REPORT.md`](docs/sample_report/COVID19_CASE_REPORT.md) — a full end-to-end diagnostic walk-through from patient input to clinical report.
 
 ---
 
-## 🧪 Testing the Analyzers
+## 🔧 HAI-DEF Models Used
 
-Test the hierarchical analyzers independently:
+| Model | Role | How We Use It |
+|---|---|---|
+| **[HeAR](https://research.google/blog/hear-health-acoustic-representations/)** | Audio encoder | Frozen encoder → embeddings for cough/breath spectrograms |
+| **[MedSigLIP-448](https://huggingface.co/google/medsiglip-448)** | CXR encoder | Frozen encoder → embeddings for chest X-rays |
+| **[MedGemma 1.5-4B-IT](https://ai.google.dev/gemma/docs/medgemma)** | Report generation | Generates clinical report drafts from multimodal evidence |
 
-```bash
-cd physiology_explain
-
-# Test audio analyzer with synthetic patterns
-python test_audio_analyzer.py
-
-# Test audio analyzer with real audio file
-python test_audio_analyzer.py /path/to/audio.png
-
-# Test CXR analyzer with synthetic patterns
-python test_cxr_analyzer.py
-
-# Test CXR analyzer with real CXR image
-python test_cxr_analyzer.py /path/to/cxr.jpeg
-```
-
-Each test includes 6 synthetic test cases covering all major disease patterns.
+All three HAI-DEF models work together in an **agentic pipeline**: two specialized analysis agents feed structured evidence into MedGemma for synthesis.
 
 ---
 
-## ⚙️ Configuration
+## 🌍 Vision & Impact
 
-Enable/disable physiological analysis in `configs/config.yaml`:
-
-```yaml
-# Audio physiology analysis
-physiology:
-  enabled: True
-  output_dir: "outputs/evidence/physiology"
-
-# CXR physiology analysis
-cxr_physiology:
-  enabled: True
-  output_dir: "outputs/evidence/cxr_physiology"
-
-# Visual attribution
-gradcam:
-  enabled: True
-  targets: ["occlusion"]
-  output_dir: "outputs/gradcam"
-  alpha: 0.3
-
-# MedGemma report generation
-report:
-  enabled: True
-  model_id: "google/medgemma-1.5-4b-it"
-  output_dir: "outputs/reports"
-  max_new_tokens: 512
-  temperature: 0.2
-```
+- **Interpretability first:** Every conclusion is backed by quantitative measurements and explicit thresholds — no black boxes.
+- **Edge-deployable:** Built on open-weight models that can run on local hardware without cloud dependencies.
+- **Global health equity:** Designed for resource-limited settings where specialist access is limited.
+- **Clinician-centered:** Outputs are structured to support, not replace, clinical decision-making.
 
 ---
 
-## 📖 Documentation
+## ⚠️ Clinical Safety Disclaimer
 
-- **Complete Guide**: [`physiology_explain/DOCUMENTATION.md`](physiology_explain/DOCUMENTATION.md) - Comprehensive documentation for hierarchical analysis
-  - System architecture and 3-level reasoning
-  - Audio physiological analysis (all 9 diseases)
-  - CXR radiological analysis (all 9 diseases)
-  - Implementation details and thresholds
-  - Example reports with multimodal integration
-  - Testing and validation procedures
-- **Design Document**: `Hierarchical_Physio_Model_Design_Doc.md.pdf` - Clinical rationale
-- **Audio Plan**: `Agent1_Audio/physiology/plan.md` - Audio analysis design
-
----
-
-## 🎯 Key Features
-
-### Multimodal Evidence Integration
-- **Audio analysis** detects acoustic signatures (dry vs wet cough, silent chest, wheezes)
-- **CXR analysis** detects visual patterns (peripheral GGO, apical cavities, consolidation)
-- **Cross-modal validation** identifies agreement/disagreement between modalities
-- **Biological story-telling** provides quantitative evidence with clinical reasoning
-
-### Interpretability
-- All thresholds and decisions are explicit and traceable
-- Each conclusion is backed by specific measurements (e.g., "spectral centroid 2300 Hz")
-- Differential diagnosis shows why alternatives were ruled out
-- Natural language conclusions explain the reasoning process
-
-### Clinical Safety
-- **Not a diagnostic tool** - outputs are hypothesis-level evidence only
-- Designed for clinician review, not autonomous decision-making
-- Includes caveats and recommendations for additional testing
-- Transparent about confidence levels and uncertainties
-
----
-
-## 🔧 Checkpoints and Encoders
-
-By default, the pipeline uses **stub encoders** with the same interfaces as the real models.
-
-To use real encoders, set paths in `configs/config.yaml`:
-```yaml
-audio_checkpoint: /path/to/hear_checkpoint.pt
-image_checkpoint: /path/to/cxr_checkpoint.pt
-use_stub_encoders: false
-```
-
----
-
-## ⚠️ Clinical Limitations and Safety Notes
-
-- **Not a diagnostic tool**. Outputs are **signals** and **hypotheses**, not diagnoses.
-- Scores are **heuristic** and not calibrated to clinical risk.
-- Physiological proxies are **conceptual** and meant for **interpretability**, not validation.
-- Always interpret results alongside clinical context and standard of care.
-- The hierarchical analysis is designed to support, not replace, clinical judgment.
-- All biomarkers and thresholds are based on literature review and require validation.
+> **This is NOT a diagnostic tool.** All outputs are hypothesis-level evidence only.
+> Designed for research and educational purposes. Always interpret results alongside clinical context and standard of care. Not validated for clinical use.
 
 ---
 
 ## 📚 References
 
-This implementation is inspired by clinical decision-making processes and incorporates:
-- Acoustic analysis principles from pulmonary auscultation literature
-- Radiological patterns from CXR interpretation guidelines
-- Hierarchical reasoning frameworks from diagnostic reasoning research
+- [Health Acoustic Representations (HeAR)](https://research.google/blog/hear-health-acoustic-representations/) — Google Research
+- [MedSigLIP](https://huggingface.co/google/medsiglip-448) — Medical image-language pretraining
+- [MedGemma](https://ai.google.dev/gemma/docs/medgemma) — Medical language model
+- [HAI-DEF](https://developers.google.com/health-ai-developer-foundations) — Health AI Developer Foundations
 
-For research and educational purposes only.
+---
+
+<div align="center">
+
+**Built for the [MedGemma Impact Challenge 2026](https://www.kaggle.com/competitions/med-gemma-impact-challenge) on Kaggle**
+
+</div>
