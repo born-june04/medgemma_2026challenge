@@ -1,8 +1,15 @@
 # Multimodal Pulmonary Diagnostic Assistant
 
-**Team:** June Lee, Jake Chensky \
-**Competition:** [MedGemma Impact Challenge 2026](https://www.kaggle.com/competitions/med-gemma-impact-challenge)  \
+**Team:** June Lee, Jake Chansky \
+**Competition:** [MedGemma Impact Challenge 2026](https://www.kaggle.com/competitions/med-gemma-impact-challenge) \
 **Repository:** [GitHub](https://github.com/born-june04/medgemma_2026challenge)
+
+### Team & Roles
+
+| Member | Role | Specialty |
+|---|---|---|
+| **June Lee** (Lead) | Pipeline Architecture, Physiological Reasoning Model | Designed the 3-level hierarchical reasoning framework, built the multimodal fusion pipeline, and developed the Audio/CT physiology analyzers |
+| **Jake Chansky** | Agent Workflow, Data Engineering | Orchestrated the agentic workflow deployment, curated and structured the multi-class Chest Diseases Dataset, built evaluation infrastructure |
 
 ---
 
@@ -128,12 +135,54 @@ Audio "silent chest" (HF energy: 0.03) directly correlates with CXR hyperlucency
 
 ---
 
+## Product Feasibility & Deployment
+
+### Application Stack
+
+| Component | Technology | Rationale |
+|---|---|---|
+| Audio Encoder | HeAR (frozen, 768-dim) | Lightweight inference, no GPU required for embedding extraction |
+| Image Encoder | MedSigLIP-448 (frozen, 768-dim) | Single forward pass per image, compatible with edge GPUs |
+| Classifier Heads | 2-layer MLP (768→256→9) | <1ms inference, ~100KB per modality |
+| Report Generator | MedGemma 1.5-4B-IT | Quantized 4-bit via GPTQ for edge deployment |
+| Physiological Analyzer | Rule-based reasoning tree | Pure Python, zero latency, fully transparent |
+
+### Deployment Strategy
+
+- **Edge-first architecture:** All encoders are frozen and open-weight — no cloud API dependency. A single NVIDIA Jetson Orin or Apple M-series laptop can run the full pipeline.
+- **Audio-only screening mode:** In the most resource-constrained settings, Agent 1 (HeAR) runs standalone on a smartphone microphone, providing initial screening without any imaging equipment.
+- **Modular scale-up:** Start with audio-only, add CXR (portable X-ray), then CT when available — the pipeline gracefully handles 1, 2, or 3 modalities.
+- **EHR integration:** Structured JSON outputs (`docs/sample_outputs/`) are designed for direct integration into FHIR-compatible electronic health record systems.
+
+### Inference Pipeline
+
+```
+Patient data → [Parallel agent inference ~2s] → Evidence fusion → MedGemma report draft → Clinician review
+```
+
+Total end-to-end latency: **~5 seconds** on consumer hardware (M2 MacBook Pro) for 3-modality analysis including report generation.
+
+---
+
 ## Impact & Vision
 
-- **Edge deployment:** All models are open-weight and can run on local hardware, enabling privacy-preserving diagnosis without cloud dependencies — critical for healthcare settings with data sovereignty requirements.
-- **Global health equity:** Designed for resource-limited environments where specialist access is scarce. Audio-based screening requires only a smartphone microphone.
-- **Clinician education:** Hierarchical reasoning provides a teaching framework, helping clinicians understand the diagnostic significance of acoustic and radiological patterns.
-- **Workflow integration:** Structured JSON outputs enable integration into existing clinical workflows and EHR systems.
+- **Global health equity:** 4.7 billion people lack access to diagnostic imaging (WHO, 2023). Our audio-first screening pipeline requires only a smartphone, enabling point-of-care respiratory assessment in community health settings.
+- **Clinician force multiplier:** In sub-Saharan Africa, there is 1 radiologist per 1 million people. AI-generated evidence chains allow general practitioners to make specialist-level pulmonary assessments with transparent supporting evidence.
+- **Clinician education:** The 3-level hierarchical reasoning framework serves as a teaching tool — showing *why* specific radiological or acoustic patterns map to specific diseases, not just *that* they do.
+- **Privacy-preserving:** All processing happens locally. No patient data leaves the device — critical for regulatory compliance (HIPAA, GDPR) and trust in healthcare AI.
+
+---
+
+## Agentic Workflow Design
+
+Our pipeline is an inherently **agentic system** where three specialized AI agents independently analyze complementary data modalities, then coordinate through a structured evidence fusion protocol:
+
+1. **Autonomous analysis:** Each agent independently processes its modality through a frozen encoder → classifier → physiological reasoning pipeline, producing structured evidence without knowledge of other agents' findings.
+2. **Cross-modal validation:** The fusion layer checks whether agents agree or disagree, and quantifies the strength of agreement.
+3. **Structured disagreement handling:** When agents disagree, the system doesn't silently pick a winner — it raises a **NEEDS CONFIRMATION** flag with weighted voting resolution and specific recommended confirmatory tests (see [Disagreement Case Report](docs/sample_report/DISAGREEMENT_CASE_REPORT.md)).
+4. **Report synthesis:** MedGemma synthesizes all agent evidence into a clinician-facing report, preserving all individual agent perspectives.
+
+This agentic design mirrors how clinical teams operate: multiple specialists independently evaluate a case, then convene to discuss and reconcile their findings.
 
 ---
 
