@@ -252,6 +252,11 @@ python pipeline.py \
 ├── data/                       # Dataset (Chest Diseases Dataset)
 ├── pipeline.py                 # CLI entrypoint
 ├── generate_sample_outputs.py  # Generate demo outputs locally
+├── generate_figures.py         # COVID-19 case figures generator
+├── generate_case_figures.py    # PTX & Disagreement figures generator
+├── run_pipeline_with_physiology.sh  # Full pipeline runner
+├── requirements.txt            # Python dependencies
+├── README.md                   # This file
 ├── WRITEUP.md                  # Competition technical report
 └── LICENSE                     # CC BY 4.0
 ```

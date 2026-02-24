@@ -6,6 +6,7 @@ streamlit
 pillow
 soundfile
 pyyaml
+matplotlib
 transformers==4.40.0
 tokenizers==0.19.1
 huggingface_hub==0.36.0
